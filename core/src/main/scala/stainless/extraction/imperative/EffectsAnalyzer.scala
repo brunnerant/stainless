@@ -315,14 +315,16 @@ trait EffectsAnalyzer extends oo.CachingPhase {
         case ADTFieldAccessor(fid) +: rest =>
           rec(args(symbols.getConstructor(id).fields.indexWhere(_.id == fid)), rest)
         case _ =>
-          throw MalformedStainlessCode(expr, s"Couldn't compute effect targets in: $expr")
+          throw MalformedStainlessCode(expr, s"XXX Couldn't compute effect targets in: $expr")
       }
 
       case ClassConstructor(ct, args) => path match {
+        case Seq() =>
+          Set.empty
         case ClassFieldAccessor(fid) +: rest =>
           rec(args(ct.tcd.fields.indexWhere(_.id == fid)), rest)
         case _ =>
-          throw MalformedStainlessCode(expr, s"Couldn't compute effect targets in: $expr")
+          throw MalformedStainlessCode(expr, s"YYY Couldn't compute effect targets in: $expr, $path")
       }
 
       case Assert(_, _, e) => rec(e, path)
