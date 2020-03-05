@@ -320,7 +320,7 @@ trait EffectsAnalyzer extends oo.CachingPhase {
 
       case ClassConstructor(ct, args) => path match {
         case Seq() =>
-          Set.empty
+          args.flatMap(rec(_, path)).toSet
         case ClassFieldAccessor(fid) +: rest =>
           rec(args(ct.tcd.fields.indexWhere(_.id == fid)), rest)
         case _ =>
@@ -365,7 +365,8 @@ trait EffectsAnalyzer extends oo.CachingPhase {
 
       case Let(vd, e, b) =>
         val bEffects = rec(b, path)
-        val res = for (ee <- getEffects(e); be <- bEffects) yield {
+        val eEffects = getEffects(e)
+        val res = for (ee <- eEffects; be <- bEffects) yield {
           if (be.receiver == vd.toVariable) ee.append(be) else be
         }
 
@@ -373,8 +374,22 @@ trait EffectsAnalyzer extends oo.CachingPhase {
           throw MalformedStainlessCode(expr, s"Couldn't compute effect targets in: $expr")
 
         res
+      
+      case Block(exprs, last) =>
+        exprs.flatMap(rec(_, path)).toSet ++ rec(last, path)
+
+      case fa @ FieldAssignment(o, id, v) =>
+        assert(path.isEmpty)
+        val accessor = typeToAccessor(o.getType, id)
+        val receiverEffects = rec(o, Seq(accessor))
+        val rhsEffects = getEffects(v)
+        receiverEffects ++ rhsEffects
+
+      case Operator(es, recons) =>
+        es.flatMap(rec(_, path)).toSet
 
       case _ =>
+        //???
         throw MalformedStainlessCode(expr, s"Couldn't compute effect targets in: $expr")
     }
 
