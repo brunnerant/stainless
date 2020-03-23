@@ -24,18 +24,18 @@ package object throwing {
     // utils.DebugPipeline("ExceptionLifting", ExceptionLifting(trees, imperative.trees))
     ExtractionPipeline(new CheckingTransformer {
       override val s: trees.type = trees
-      override val t: imperative.trees.type = imperative.trees
+      override val t: myimperative.trees.type = myimperative.trees
     })
   }
 
   def fullExtractor(implicit ctx: inox.Context) = extractor andThen nextExtractor
-  def nextExtractor(implicit ctx: inox.Context) = imperative.fullExtractor
+  def nextExtractor(implicit ctx: inox.Context) = myimperative.fullExtractor
 
   def phaseSemantics(implicit ctx: inox.Context): inox.SemanticsProvider { val trees: throwing.trees.type } = {
     extraction.phaseSemantics(throwing.trees)(fullExtractor)
   }
 
-  def nextPhaseSemantics(implicit ctx: inox.Context): inox.SemanticsProvider { val trees: imperative.trees.type } = {
-    imperative.phaseSemantics
+  def nextPhaseSemantics(implicit ctx: inox.Context): inox.SemanticsProvider { val trees: myimperative.trees.type } = {
+    myimperative.phaseSemantics
   }
 }

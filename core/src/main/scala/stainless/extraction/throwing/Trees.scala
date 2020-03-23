@@ -4,7 +4,7 @@ package stainless
 package extraction
 package throwing
 
-trait Trees extends imperative.Trees { self =>
+trait Trees extends myimperative.Trees { self =>
 
   protected def getExceptionType(implicit s: Symbols): Option[Type] =
     s.lookup.get[ClassDef]("stainless.lang.Exception").map(cd => ClassType(cd.id, Seq()))

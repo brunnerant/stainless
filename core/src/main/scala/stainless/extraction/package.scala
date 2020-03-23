@@ -102,7 +102,7 @@ package object extraction {
     innerclasses.extractor andThen
     methods.extractor      andThen
     throwing.extractor     andThen
-    imperative.extractor   andThen
+    myimperative.extractor andThen
     oo.extractor           andThen
     innerfuns.extractor    andThen
     inlining.extractor     andThen
