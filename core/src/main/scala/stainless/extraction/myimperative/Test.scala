@@ -5,10 +5,12 @@ package myimperative
 
 trait Test
   extends oo.CachingPhase
-    with SimpleSorts
+    with extraction.IdentitySorts
+    with extraction.IdentityFunctions
     with oo.IdentityTypeDefs
-    with oo.SimpleClasses {
-  
+    with oo.IdentityClasses {
+  override protected type TransformerContext = s.Symbols
+  override protected def getContext(symbols: s.Symbols) = symbols
 }
 
 object Test {
