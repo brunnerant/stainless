@@ -88,7 +88,3 @@ class erasable extends Annotation
 
 @ignore
 class indexedAt(n: BigInt) extends Annotation
-
-/** This is an experiment to perform imperative translation using explicit annotations */
-@ignore
-class mut extends Annotation
