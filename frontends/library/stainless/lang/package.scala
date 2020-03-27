@@ -10,19 +10,6 @@ import scala.language.implicitConversions
 package object lang {
   import stainless.proof._
 
-  case class Ref[T](private value: T) {
-    def deref: T = value
-  }
-
-  case class RefMut[T](private value: T) {
-    def deref: T = value
-  }
-
-  implicit case class AsValue[T](private value: T) {
-    def ref: Ref[T] = Ref(value)
-    def refMut: RefMut[T] = RefMut(value)
-  }
-
   @library
   def ghost[A](@ghost value: A): Unit = ()
 
@@ -157,5 +144,25 @@ package object lang {
   @extern @library
   def print(x: String): Unit = {
     scala.Predef.print(x)
+  }
+
+  /**
+   * Those three classes are used to provide explicit anntations about
+   * the type of references. This is an experiment for imperative code translation.
+   */
+  @ignore
+  case class Ref[T](private value: T) {
+    def deref: T = value
+  }
+
+  @ignore
+  case class RefMut[T](private value: T) {
+    def deref: T = value
+  }
+
+  @ignore
+  implicit class AsValue[T](private value: T) {
+    def ref: Ref[T] = Ref(value)
+    def refMut: RefMut[T] = RefMut(value)
   }
 }

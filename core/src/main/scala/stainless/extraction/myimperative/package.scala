@@ -6,9 +6,7 @@ package extraction
 import scala.language.existentials
 
 package object myimperative {
-
-  type Trees = imperative.Trees
-
+  
   object trees extends myimperative.Trees with oo.ClassSymbols {
     case class Symbols(
       functions: Map[Identifier, FunDef],

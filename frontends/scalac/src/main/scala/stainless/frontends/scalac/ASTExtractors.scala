@@ -84,6 +84,9 @@ trait ASTExtractors {
   protected lazy val bigIntSym          = classFromName("scala.math.BigInt")
   protected lazy val stringSym          = classFromName("java.lang.String")
 
+  protected lazy val refSym =     classFromName("stainless.lang.Ref")
+  protected lazy val refMutSym =  classFromName("stainless.lang.RefMut")
+
   protected def functionTraitSym(i:Int) = {
     require(0 <= i && i <= 22)
     classFromName("scala.Function" + i)
@@ -130,6 +133,8 @@ trait ASTExtractors {
     0 <= i && i <= 22 && sym == functionTraitSym(i)
 
   def isArrayClassSym(sym: Symbol): Boolean = sym == arraySym
+
+  def isRefSym(sym: Symbol): Boolean = sym == refSym || sym == refMutSym
 
   private val bvtypes = Set(ByteTpe, ShortTpe, IntTpe, LongTpe)
 
@@ -500,6 +505,36 @@ trait ASTExtractors {
         case Apply(ExSymbol("stainless", "lang", "StaticChecks", "assert"), contractBody :: (error: Literal) :: Nil) =>
           Some((contractBody, Some(error.value.stringValue), true))
 
+        case _ =>
+          None
+      }
+    }
+    
+    /** Extracts a 'expr.ref' expression */
+    object ExRefExpression {
+      def unapply(tree: Apply) : Option[Tree] = tree match {
+        case Select(Apply(TypeApply(ExSymbol("stainless", "lang", "AsValue"), List(_)), expr), ExNamed("ref")) =>
+          Some(expr)
+        case _ =>
+          None
+      }
+    }
+
+    /** Extracts a 'expr.refMut' expression */
+    object ExRefMutExpression {
+      def unapply(tree: Apply) : Option[Tree] = tree match {
+        case Select(Apply(TypeApply(ExSymbol("stainless", "lang", "AsValue"), List(_)), expr), ExNamed("refMut")) =>
+          Some(expr)
+        case _ =>
+          None
+      }
+    }
+
+    /** Extracts a 'expr.deref' expression */
+    object ExDerefExpression {
+      def unapply(tree: Apply) : Option[Tree] = tree match {
+        case Select(expr, ExNamed("refMut")) if isRefSym(expr.tpe.typeSymbol) =>
+          Some(expr)
         case _ =>
           None
       }
