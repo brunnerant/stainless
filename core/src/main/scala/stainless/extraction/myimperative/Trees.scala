@@ -3,7 +3,7 @@ package stainless
 package extraction
 package myimperative
 
-trait Trees extends imperative.Trees {
+trait Trees extends imperative.Trees { self =>
 
   /** Represents the shared referencing of an expression */
   case class Ref(expr: Expr) extends Expr with CachingTyped {
@@ -42,9 +42,33 @@ trait Trees extends imperative.Trees {
       protected val t: tree.type = tree
     }.asInstanceOf[TreeDeconstructor { val s: self.type; val t: that.type }]
 
-    case _ => super.getDeconstructor(that)
+    case _ =>
+      super.getDeconstructor(that)
   }
+}
 
+trait Printer extends imperative.Printer {
+  protected val trees: Trees
+  import trees._
+
+  override protected def ppBody(tree: Tree)(implicit ctx: PrinterContext): Unit = tree match {
+    case Ref(e) =>
+      p"$e.ref"
+
+    case RefMut(e) =>
+      p"$e.refMut"
+
+    case Deref(e) =>
+      p"$e.deref"
+
+    case RefType(t) =>
+      p"Ref[$t]"
+
+    case RefMutType(t) =>
+      p"RefMut[$t]"
+
+    case _ => super.ppBody(tree)
+  }
 }
 
 trait TreeDeconstructor extends imperative.TreeDeconstructor {
@@ -53,24 +77,24 @@ trait TreeDeconstructor extends imperative.TreeDeconstructor {
 
   override def deconstruct(e: s.Expr): Deconstructed[t.Expr] = e match {
     case s.Ref(expr) =>
-      (Seq(), Seq(), expr, Seq(), Seq(), (_, _, es, _, _) => t.Ref(es(0)))
+      (Seq(), Seq(), Seq(expr), Seq(), Seq(), (_, _, es, _, _) => t.Ref(es(0)))
 
     case s.RefMut(expr) =>
-      (Seq(), Seq(), expr, Seq(), Seq(), (_, _, es, _, _) => t.RefMut(es(0)))
+      (Seq(), Seq(), Seq(expr), Seq(), Seq(), (_, _, es, _, _) => t.RefMut(es(0)))
 
     case s.Deref(expr) =>
-      (Seq(), Seq(), expr, Seq(), Seq(), (_, _, es, _, _) => t.Deref(es(0)))
+      (Seq(), Seq(), Seq(expr), Seq(), Seq(), (_, _, es, _, _) => t.Deref(es(0)))
 
     case _ =>
       super.deconstruct(e)
   }
 
-  override def deconstruct(tpe: s.Type): Deconstructed[t.Type] = e match {
+  override def deconstruct(tpe: s.Type): Deconstructed[t.Type] = tpe match {
     case s.RefType(inner) =>
-      (Seq(), Seq(), Seq(), inner, Seq(), (_, _, _, ts, _) => t.RefType(ts(0)))
+      (Seq(), Seq(), Seq(), Seq(inner), Seq(), (_, _, _, ts, _) => t.RefType(ts(0)))
 
     case s.RefMutType(inner) =>
-      (Seq(), Seq(), Seq(), inner, Seq(), (_, _, _, ts, _) => t.RefMutType(ts(0)))
+      (Seq(), Seq(), Seq(), Seq(inner), Seq(), (_, _, _, ts, _) => t.RefMutType(ts(0)))
 
     case _ =>
       super.deconstruct(tpe)

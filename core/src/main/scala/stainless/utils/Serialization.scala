@@ -96,7 +96,7 @@ class XLangSerializer(override val trees: extraction.xlang.Trees, serializeProdu
     *
     * The new identifiers in the mapping range from 180 to 243.
     *
-    * NEXT ID: 244
+    * NEXT ID: 249
     */
   override protected def classSerializers: Map[Class[_], Serializer[_]] =
     super.classSerializers ++ Map(
@@ -135,6 +135,13 @@ class XLangSerializer(override val trees: extraction.xlang.Trees, serializeProdu
       classSerializer[MutableMapUpdate]       (235),
       classSerializer[MutableMapUpdated]      (236),
       classSerializer[MutableMapDuplicate]    (237),
+
+      // My-imperative trees
+      classSerializer[Ref]              (244),
+      classSerializer[RefMut]           (245),
+      classSerializer[Deref]            (246),
+      classSerializer[RefType]          (247),
+      classSerializer[RefMutType]       (248),
 
       // Object-oriented trees
       classSerializer[ClassConstructor] (200),

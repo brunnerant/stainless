@@ -151,17 +151,17 @@ package object lang {
    * the type of references. This is an experiment for imperative code translation.
    */
   @ignore
-  case class Ref[T](private value: T) {
+  case class Ref[T] private (private val value: T) {
     def deref: T = value
   }
 
   @ignore
-  case class RefMut[T](private value: T) {
+  case class RefMut[T] private (private val value: T) {
     def deref: T = value
   }
 
   @ignore
-  implicit class AsValue[T](private value: T) {
+  implicit class AsValue[T](private val value: T) {
     def ref: Ref[T] = Ref(value)
     def refMut: RefMut[T] = RefMut(value)
   }

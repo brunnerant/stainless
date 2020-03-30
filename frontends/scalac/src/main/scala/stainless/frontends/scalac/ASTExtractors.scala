@@ -134,7 +134,9 @@ trait ASTExtractors {
 
   def isArrayClassSym(sym: Symbol): Boolean = sym == arraySym
 
-  def isRefSym(sym: Symbol): Boolean = sym == refSym || sym == refMutSym
+  def isRefSym(sym: Symbol): Boolean = sym == refSym
+  def isRefMutSym(sym: Symbol): Boolean = sym == refMutSym
+  def isRefOrRefMutSym(sym: Symbol): Boolean = sym == refSym || sym == refMutSym
 
   private val bvtypes = Set(ByteTpe, ShortTpe, IntTpe, LongTpe)
 
@@ -512,9 +514,9 @@ trait ASTExtractors {
     
     /** Extracts a 'expr.ref' expression */
     object ExRefExpression {
-      def unapply(tree: Apply) : Option[Tree] = tree match {
-        case Select(Apply(TypeApply(ExSymbol("stainless", "lang", "AsValue"), List(_)), expr), ExNamed("ref")) =>
-          Some(expr)
+      def unapply(tree: Select) : Option[Tree] = tree match {
+        case Select(Apply(TypeApply(ExSymbol("stainless", "lang", "AsValue"), List(_)), es), ExNamed("ref")) =>
+          Some(es.head)
         case _ =>
           None
       }
@@ -522,9 +524,9 @@ trait ASTExtractors {
 
     /** Extracts a 'expr.refMut' expression */
     object ExRefMutExpression {
-      def unapply(tree: Apply) : Option[Tree] = tree match {
-        case Select(Apply(TypeApply(ExSymbol("stainless", "lang", "AsValue"), List(_)), expr), ExNamed("refMut")) =>
-          Some(expr)
+      def unapply(tree: Select) : Option[Tree] = tree match {
+        case Select(Apply(TypeApply(ExSymbol("stainless", "lang", "AsValue"), List(_)), es), ExNamed("refMut")) =>
+          Some(es.head)
         case _ =>
           None
       }
@@ -532,8 +534,8 @@ trait ASTExtractors {
 
     /** Extracts a 'expr.deref' expression */
     object ExDerefExpression {
-      def unapply(tree: Apply) : Option[Tree] = tree match {
-        case Select(expr, ExNamed("refMut")) if isRefSym(expr.tpe.typeSymbol) =>
+      def unapply(tree: Select) : Option[Tree] = tree match {
+        case Select(expr, ExNamed("deref")) if isRefOrRefMutSym(expr.tpe.typeSymbol) =>
           Some(expr)
         case _ =>
           None

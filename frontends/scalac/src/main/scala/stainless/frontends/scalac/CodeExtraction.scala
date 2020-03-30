@@ -1670,6 +1670,12 @@ trait CodeExtraction extends ASTExtractors {
     case TypeRef(_, sym, btt :: Nil) if isArrayClassSym(sym) =>
       xt.ArrayType(extractType(btt))
 
+    case TypeRef(_, sym, List(tpe)) if isRefSym(sym) =>
+      xt.RefType(extractType(tpe))
+
+    case TypeRef(_, sym, List(tpe)) if isRefMutSym(sym) =>
+      xt.RefMutType(extractType(tpe))
+
     case TypeRef(_, sym, subs) if subs.nonEmpty && isFunction(sym, subs.size - 1) =>
       val from = subs.init
       val to   = subs.last

@@ -19,7 +19,7 @@ package object myimperative {
   }
 
   def extractor(implicit ctx: inox.Context) = {
-    utils.DebugPipeline("Test", Test(trees, oo.trees))
+    utils.DebugPipeline("MyImperative", MyImperative(trees, oo.trees))
   }
 
   def fullExtractor(implicit ctx: inox.Context) = extractor andThen nextExtractor

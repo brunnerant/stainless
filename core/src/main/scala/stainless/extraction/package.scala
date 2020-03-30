@@ -39,6 +39,7 @@ package object extraction {
     "AntiAliasing"              -> "Rewrite field and array mutations",
     "ImperativeCodeElimination" -> "Eliminate while loops and assignments",
     "ImperativeCleanup"         -> "Cleanup after imperative transformations",
+    "MyImperative"              -> "Experiment with explicit reference types",
     "AdtSpecialization"         -> "Specialize classes into ADTs (when possible)",
     "RefinementLifting"         -> "Lift simple refinements to contracts",
     "TypeEncoding"              -> "Encode non-ADT types",

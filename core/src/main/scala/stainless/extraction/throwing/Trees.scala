@@ -62,7 +62,7 @@ trait Trees extends myimperative.Trees { self =>
   }
 }
 
-trait Printer extends imperative.Printer {
+trait Printer extends myimperative.Printer {
   protected val trees: Trees
   import trees._
 
@@ -180,7 +180,7 @@ trait ExprOps extends imperative.ExprOps {
   }
 }
 
-trait TreeDeconstructor extends imperative.TreeDeconstructor {
+trait TreeDeconstructor extends myimperative.TreeDeconstructor {
   protected val s: Trees
   protected val t: Trees
 
