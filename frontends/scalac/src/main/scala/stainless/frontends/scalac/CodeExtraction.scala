@@ -1041,6 +1041,16 @@ trait CodeExtraction extends ASTExtractors {
     case ExTupleExtract(tuple, index) =>
       xt.TupleSelect(extractTree(tuple), index)
 
+    /** The three following cases are an experiment with explicit references */
+    case ExRefExpression(expr) =>
+      xt.Ref(extractTree(expr))
+
+    case ExRefMutExpression(expr) =>
+      xt.RefMut(extractTree(expr))
+
+    case ExDerefExpression(expr) =>
+      xt.Deref(extractTree(expr))
+
     /**
      * XLang Extractors
      */
@@ -1659,6 +1669,12 @@ trait CodeExtraction extends ASTExtractors {
 
     case TypeRef(_, sym, btt :: Nil) if isArrayClassSym(sym) =>
       xt.ArrayType(extractType(btt))
+
+    case TypeRef(_, sym, List(tpe)) if isRefSym(sym) =>
+      xt.RefType(extractType(tpe))
+
+    case TypeRef(_, sym, List(tpe)) if isRefMutSym(sym) =>
+      xt.RefMutType(extractType(tpe))
 
     case TypeRef(_, sym, subs) if subs.nonEmpty && isFunction(sym, subs.size - 1) =>
       val from = subs.init

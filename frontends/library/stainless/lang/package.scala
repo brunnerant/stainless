@@ -145,4 +145,24 @@ package object lang {
   def print(x: String): Unit = {
     scala.Predef.print(x)
   }
+
+  /**
+   * Those three classes are used to provide explicit anntations about
+   * the type of references. This is an experiment for imperative code translation.
+   */
+  @ignore
+  case class Ref[T] private (private val value: T) {
+    def deref: T = value
+  }
+
+  @ignore
+  case class RefMut[T] private (private val value: T) {
+    def deref: T = value
+  }
+
+  @ignore
+  implicit class AsValue[T](private val value: T) {
+    def ref: Ref[T] = Ref(value)
+    def refMut: RefMut[T] = RefMut(value)
+  }
 }
