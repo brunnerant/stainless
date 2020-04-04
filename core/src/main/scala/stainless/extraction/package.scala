@@ -40,6 +40,7 @@ package object extraction {
     "ImperativeCodeElimination" -> "Eliminate while loops and assignments",
     "ImperativeCleanup"         -> "Cleanup after imperative transformations",
     "MyImperative"              -> "Experiment with explicit reference types",
+    "MyImperativeCleanup"       -> "Cleanup after my imperative transformations",
     "AdtSpecialization"         -> "Specialize classes into ADTs (when possible)",
     "RefinementLifting"         -> "Lift simple refinements to contracts",
     "TypeEncoding"              -> "Encode non-ADT types",

@@ -7,18 +7,14 @@ trait Trees extends imperative.Trees { self =>
 
   /** Represents the shared referencing of an expression */
   case class Ref(expr: Expr) extends Expr with CachingTyped {
-    protected def computeType(implicit s: Symbols): Type = expr.getType match {
-      case Untyped => Untyped
-      case tpe => RefType(tpe)
-    }
+    protected def computeType(implicit s: Symbols): Type =
+      unveilUntyped(RefType(expr))
   }
 
   /** Represents the mutable referencing of an expression */
   case class RefMut(expr: Expr) extends Expr with CachingTyped {
-    protected def computeType(implicit s: Symbols): Type = expr.getType match {
-      case Untyped => Untyped
-      case tpe => RefMutType(tpe)
-    }
+    protected def computeType(implicit s: Symbols): Type =
+      unveilUntyped(RefMutType(expr))
   }
 
   /** Represents the dereferencing of an expression */
