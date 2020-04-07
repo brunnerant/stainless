@@ -198,7 +198,7 @@ trait EffectsAnalyzer extends oo.CachingPhase {
           Some(expr)
       }
 
-      rec(that, path).toSet.flatMap(getEffects)
+      rec(that, path).toSet.flatMap(getTargets)
     }
 
     def prefixOf(that: Path): Boolean = {
@@ -301,7 +301,11 @@ trait EffectsAnalyzer extends oo.CachingPhase {
     override def toString: String = asString
   }
 
-  def getEffects(expr: Expr)(implicit symbols: Symbols): Set[Target] = {
+  /**
+   * This returns all the targets that might be mutated if the given expression was mutated.
+   * It can be used to track back what effects it has to mutate the given expression.
+   */
+  def getTargets(expr: Expr)(implicit symbols: Symbols): Set[Target] = {
     def rec(expr: Expr, path: Seq[Accessor]): Set[Target] = expr match {
       case v: Variable => Set(Target(v, None, Path(path)))
       case _ if variablesOf(expr).forall(v => !symbols.isMutableType(v.tpe)) => Set.empty
@@ -363,7 +367,7 @@ trait EffectsAnalyzer extends oo.CachingPhase {
 
       case Let(vd, e, b) =>
         val bEffects = rec(b, path)
-        val res = for (ee <- getEffects(e); be <- bEffects) yield {
+        val res = for (ee <- getTargets(e); be <- bEffects) yield {
           if (be.receiver == vd.toVariable) ee.append(be) else be
         }
 
@@ -379,13 +383,13 @@ trait EffectsAnalyzer extends oo.CachingPhase {
     rec(expr, Seq.empty)
   }
 
-  def getExactEffects(expr: Expr)(implicit symbols: Symbols): Set[Target] = getEffects(expr) match {
+  def getExactTargets(expr: Expr)(implicit symbols: Symbols): Set[Target] = getTargets(expr) match {
     case effects if effects.nonEmpty => effects
     case _ => throw MalformedStainlessCode(expr, s"Couldn't compute exact effect targets in: $expr")
   }
 
-  def getKnownEffects(expr: Expr)(implicit symbols: Symbols): Set[Target] = try {
-    getEffects(expr)
+  def getKnownTargets(expr: Expr)(implicit symbols: Symbols): Set[Target] = try {
+    getTargets(expr)
   } catch {
     case _: MalformedStainlessCode => Set.empty
   }
@@ -417,30 +421,33 @@ trait EffectsAnalyzer extends oo.CachingPhase {
     def inEnv(effect: Effect, env: Map[Variable, Effect]): Option[Effect] =
       env.get(effect.receiver).map(e => e.copy(path = e.path ++ effect.path))
 
-    def effect(expr: Expr, env: Map[Variable, Effect]): Set[Effect] =
-      getEffects(expr) flatMap { (target: Target) =>
+    def targets(expr: Expr, env: Map[Variable, Effect]): Set[Effect] =
+      getTargets(expr) flatMap { (target: Target) =>
         inEnv(target.toEffect, env).toSet
       }
 
     def rec(expr: Expr, env: Map[Variable, Effect]): Set[Effect] = expr match {
       case Let(vd, e, b) if symbols.isMutableType(vd.tpe) =>
-        rec(e, env) ++ rec(b, env ++ effect(e, env).map(vd.toVariable -> _))
+        // BUG: here the .map(...) loses some information, which disallows certain valid
+        // programs to be transformed. The fix would require env to be of type
+        // Map[Variable, Set[Effect]] to capture all the effects on the free variables.
+        rec(e, env) ++ rec(b, env ++ targets(e, env).map(vd.toVariable -> _))
 
       case MatchExpr(scrut, cses) if symbols.isMutableType(scrut.getType) =>
         rec(scrut, env) ++ cses.flatMap { case MatchCase(pattern, guard, rhs) =>
           val newEnv = env ++ mapForPattern(scrut, pattern).flatMap {
-            case (v, e) => effect(e, env).map(v.toVariable -> _)
+            case (v, e) => targets(e, env).map(v.toVariable -> _)
           }
           guard.toSeq.flatMap(rec(_, newEnv)).toSet ++ rec(rhs, newEnv)
         }
 
       case ArrayUpdate(o, idx, v) =>
         rec(o, env) ++ rec(idx, env) ++ rec(v, env) ++
-        effect(o, env).map(_ + ArrayAccessor(idx))
+        targets(o, env).map(_ + ArrayAccessor(idx))
 
       case MutableMapUpdate(map, key, value) =>
         rec(map, env) ++ rec(key, env) ++ rec(value, env) ++
-        effect(map, env).map(_ + MutableMapAccessor(key))
+        targets(map, env).map(_ + MutableMapAccessor(key))
 
       case MutableMapUpdated(map, key, value) =>
         rec(map, env) ++ rec(key, env) ++ rec(value, env)
@@ -450,13 +457,16 @@ trait EffectsAnalyzer extends oo.CachingPhase {
 
       case fa @ FieldAssignment(o, id, v) =>
         val accessor = typeToAccessor(o.getType, id)
-        rec(o, env) ++ rec(v, env) ++ effect(o, env).map(_ + accessor)
+        rec(o, env) ++ rec(v, env) ++ targets(o, env).map(_ + accessor)
 
       case Application(callee, args) =>
         val ft @ FunctionType(_, _) = callee.getType
         val effects = functionTypeEffects(ft)
+
+        // The second part are the potential side-effects while evaluating the arguments
+        // The last part are the arguments that might be mutated inside the function
         rec(callee, env) ++ args.flatMap(rec(_, env)) ++
-        args.map(effect(_, env)).zipWithIndex
+        args.map(targets(_, env)).zipWithIndex
           .filter(p => effects contains p._2)
           .flatMap(_._1)
 
@@ -551,8 +561,12 @@ trait EffectsAnalyzer extends oo.CachingPhase {
     * In theory this can be overriden to use a different behaviour.
     */
   def functionTypeEffects(ft: FunctionType)(implicit symbols: Symbols): Set[Int] = {
-    ft.from.zipWithIndex.flatMap { case (tpe, i) =>
-      if (symbols.isMutableType(tpe)) Some(i) else None
+    ft.from.zipWithIndex.flatMap {
+      // We only consider mutable references as having effects on the arguments.
+      // References clearly don't have effects, and owned types are 'given' to the
+      // function, which means they aren't accessible after the call.
+      case (tpe: RefMutType, i) => Some(i)
+      case _ => None
     }.toSet
   }
 }
