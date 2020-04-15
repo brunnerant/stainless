@@ -39,7 +39,8 @@ object Test {
         val a2 = A(2)
 
         fib1(3).a = 1                   // This assignment can be performed, because fib1 has no effects,
-                                        // looking at its signature
+                                        // looking at its signature. In fact, this assignment has no effect
+                                        // from the point of view of this function.
 
         fib2(3, a1).a += 2              // This assignment cannot be performed, because fib2 has effects
                                         // and it is recursive, hence not inlinable

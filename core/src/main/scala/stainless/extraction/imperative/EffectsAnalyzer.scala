@@ -88,7 +88,12 @@ trait EffectsAnalyzer {
     def empty: Path = Path(Seq.empty)
   }
 
-  case class Effect(receiver: Variable, condition: Option[Expr], path: Path) {
+  /**
+   * This represents the target of a mutation. It consists of a variable and a path to
+   * the part of the variable that is mutated. It optionnally includes a condition if the
+   * the assignment is conditionnal.
+   */
+  case class Target(receiver: Variable, condition: Option[Expr], path: Path) {
     def +(elem: Accessor): Target = Target(receiver, condition, path :+ elem)
 
     def append(that: Target): Target = (condition, that.condition) match {
@@ -102,8 +107,6 @@ trait EffectsAnalyzer {
 
     def prependPath(path: Path): Target = Target(receiver, condition, path ++ this.path)
 
-    def toEffect: Effect = Effect(receiver, path)
-
     def asString(implicit printerOpts: PrinterOptions): String =
       s"Target(${receiver.asString}, ${condition.map(_.asString)}, ${path.asString})"
 
@@ -111,14 +114,42 @@ trait EffectsAnalyzer {
   }
 
   /**
+   * This represents an effect that occurs on a variable. It consists of a target,
+   * and the value assigned to it.
+   */
+  case class Effect(target: Target, value: Expr)
+
+  /**
+   * An environment is a mapping between variables and targets. This allows to keep track of the
+   * roots of all assignments. For example, if a variable is declared as such:
+   * val y = x.<path>
+   * then the environment will contain a pair y -> Target(x, None, <path>)
+   */
+  case class Env(variables: Map[Variable, Set[Target]]) {
+    // This allows to propagate targets for variables that were already
+    // declared in the environment. Targets that are not in the environment
+    // are left untouched.
+    def propagateTarget(t: Target): Set[Target] =
+      variables.get(t.receiver)
+        .map(ts => ts.map(t.prependPath(_)))
+        .getOrElse(t)
+
+    def +(mappings: Map[Variable, Set[Target]]): Env = copy(variables = variables ++ mappings)
+  }
+
+  /**
    * This returns all the targets that would be mutated if the given expression was assigned to.
    * For example, given the expression x.y[0], the target would be Target(x, .y[0]).
    * If branching occurs, then several targets are returned.
    */
-  def getTargets(expr: Expr)(implicit symbols: Symbols): Set[Effect] = {
-    def rec(expr: Expr, path: Seq[Accessor]): Set[Target] = expr match {
-      // Variables mark the end of a path
-      case v: Variable => Set(Effect(v, None, Path(path)))
+  def getTargets(expr: Expr, env: Env)(implicit symbols: Symbols): Set[Target] = {
+    def error(expr: Expr) =
+      throw MalformedStainlessCode(expr, s"Couldn't compute targets in: $expr")
+
+    def rec(expr: Expr, path: Seq[Accessor])(implicit env: Env): Set[Target] = expr match {
+      // Variables might refer to the environment
+      case v: Variable =>
+        env.propagateTarget(Target(v, None, Path(path)))
       
       // Those are the ways a path can increase
       case ADTSelector(e, id) => rec(e, ADTFieldAccessor(id) +: path)
@@ -132,18 +163,15 @@ trait EffectsAnalyzer {
         case ADTFieldAccessor(fid) +: rest =>
           rec(args(symbols.getConstructor(id).fields.indexWhere(_.id == fid)), rest)
         case _ =>
-          throw MalformedStainlessCode(expr, s"Couldn't compute effect targets in: $expr")
+          error(expr)
       }
 
       case ClassConstructor(ct, args) => path match {
         case ClassFieldAccessor(fid) +: rest =>
           rec(args(ct.tcd.fields.indexWhere(_.id == fid)), rest)
         case _ =>
-          throw MalformedStainlessCode(expr, s"Couldn't compute effect targets in: $expr")
+          error(expr)
       }
-
-      case Assert(_, _, e) => rec(e, path)
-      case Annotated(e, _) => rec(e, path)
 
       // If-then-else's introduce conditionnal effects
       case IfExpr(cnd, thn, els) =>
@@ -157,42 +185,28 @@ trait EffectsAnalyzer {
       case m: MatchExpr =>
         rec(symbols.matchToIfThenElse(m), path)
 
-      // Functions can mutate their arguments. The approach we take is that we only consider
-      // mutable references to be mutated. Shared references can by assumption not be mutated
-      // and owned types can be mutated but will not affect the remaining of the current
-      // function by assumption
-      case fi: (FunInvocation | Application) =>
-        rec(callee, env) ++ args.flatMap(rec(_, env)) ++
-        args.map(targets(_, env)).zipWithIndex
-          .filter(p => effects contains p._2)
-          .flatMap(_._1)
+      // Non recursive functions can be inlined to make the translation more permissive
+      case fi: FunctionInvocation if !symbols.isRecursive(fi.id) =>
+        exprOps.withoutSpecs(symbols.simplifyLets(fi.inlined))
+          .map(rec(_, path))
+          .getOrElse(error(expr))
 
-      case (_: ApplyLetRec | _: Application) => Set.empty
-      case (_: FiniteArray | _: LargeArray | _: ArrayUpdated | _: MutableMapUpdated) => Set.empty
-      case IsInstanceOf(e, _) => rec(e, path)
-      case AsInstanceOf(e, _) => rec(e, path)
-      case Old(_) => Set.empty
-      case Snapshot(_) => Set.empty
+      // For recursive function, we take a conservative approach and only look at the argument types.
+      // If there is an effect on any of the arguments, we abort.
+      case fi: FunctionInvocation
+        if (functionTypeEffects(fi.type) isEmpty) Set.empty
+        else error(expr)
 
-      case Let(vd, e, b) if !symbols.isMutableType(vd.tpe) =>
-        rec(b, path)
-
+      // Lets add variables to the environment
       case Let(vd, e, b) =>
-        val bEffects = rec(b, path)
-        val res = for (ee <- getTargets(e); be <- bEffects) yield {
-          if (be.receiver == vd.toVariable) ee.append(be) else be
-        }
+        val exprTargets = rec(e, Seq.empty)
+        rec(b, path)(env + Map(vd.toVariable -> exprTargets))
 
-        if (res.isEmpty)
-          throw MalformedStainlessCode(expr, s"Couldn't compute effect targets in: $expr")
-
-        res
-
-      case _ =>
-        throw MalformedStainlessCode(expr, s"Couldn't compute effect targets in: $expr")
+      // For now this case allows to catch all unimplemented features nicely
+      case _ => error(expr)
     }
 
-    rec(expr, Seq.empty)
+    rec(expr, Seq.empty)(env)
   }
 
   def getExactEffects(expr: Expr)(implicit symbols: Symbols): Set[Target] = getEffects(expr) match {
@@ -366,16 +380,11 @@ trait EffectsAnalyzer {
   }
 
   /** 
-   * Effects at the level of types for a function
-   *
-   * This disregards the actual implementation of a function, and considers only
-   * its type to determine a conservative abstraction of its effects.
+   * This computes the effects by looking at the function type. It takes a conservative
+   * approach and detects effects as soon as an argument has a mutable reference type.
    */
   def functionTypeEffects(ft: FunctionType): Set[Int] = {
     ft.from.zipWithIndex.flatMap {
-      // We only consider mutable references as having effects on the arguments.
-      // References clearly don't have effects, and owned types are 'given' to the
-      // function, which means they aren't accessible after the call.
       case (tpe: RefMutType, i) => Some(i)
       case _ => None
     }.toSet
