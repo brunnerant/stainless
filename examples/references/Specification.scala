@@ -61,4 +61,38 @@ object Test {
             }
         }.a = 42
     }
+
+    // This example is a bit tricky to transform, and I haven't found a way of doing it yet.
+    def test(a: Int, b: Int) = {
+        def min(a: RefMut[Int], b: RefMut[Int]): RefMut[Int] =
+            if (a.deref < b.deref) a else b
+
+        val r: RefMut[Int] = min(a.refMut, b.refMut)
+        r.deref += 1          // This assignment here should somehow know whether a or b should be mutated
+        println(s"$a, $b")    // Because otherwise, this line will print the wrong data
+
+        // In this example we could inline min to find out that information, but in a more
+        // complex example where functions call other functions, it becomes hard to keep track of that.
+    }
+
+    // The following example shows how stateful functions could be transformed using
+    // state monads. This would allow the translation to be modular and easily extensible
+    // at function boundaries. However, I don't know to what extent lambdas are supported by
+    // stainless, so I might need to ask.
+    def test(a: RefMut[Int], b: RefMut[Int]) = {
+        def min(a: RefMut[Int], b: RefMut[Int]): RefMut[Int] =
+            if (a.deref < b.deref) a else b
+
+        val r = min(a.refMut, b.refMut)
+        r.deref += 1
+    }
+
+    def test(a: Int, b: Int): (Int, Int) = {
+        def min(a: Int, b: Int): ((Int, Int) => Int, (Int, Int, Int) => (Int, Int)) =
+            if (a < b) ((a, b) => a, (a, b, x) => (x, b))
+            else ((a, b) => b, (a, b, x) => (a, x))
+
+        val (get, set) = min(a, b)
+        set(a, b, get(a, b) + 1)
+    }
 }
