@@ -79,7 +79,7 @@ object Test {
     // state monads. This would allow the translation to be modular and easily extensible
     // at function boundaries. However, I don't know to what extent lambdas are supported by
     // stainless, so I might need to ask.
-    def test(a: RefMut[Int], b: RefMut[Int]) = {
+    def test(a: Int, b: Int) = {        
         def min(a: RefMut[Int], b: RefMut[Int]): RefMut[Int] =
             if (a.deref < b.deref) a else b
 
@@ -87,12 +87,21 @@ object Test {
         r.deref += 1
     }
 
-    def test(a: Int, b: Int): (Int, Int) = {
+    def test(a: Int, b: Int, c: Int): (Int, Int) = {
         def min(a: Int, b: Int): ((Int, Int) => Int, (Int, Int, Int) => (Int, Int)) =
             if (a < b) ((a, b) => a, (a, b, x) => (x, b))
             else ((a, b) => b, (a, b, x) => (a, x))
 
-        val (get, set) = min(a, b)
-        set(a, b, get(a, b) + 1)
+        val (get1, set1) = min(a, b)
+        val (newA1, newB1) = set(a, b, get(a, b) + 1)
+
+        a = newA1
+        b = newB1
+
+        val (get2, set2) = min(b, c)
+        val (newB2, newC2) = set(b, c, get(b, c) + 1)
+
+        b = newB2
+        c = newC2
     }
 }
