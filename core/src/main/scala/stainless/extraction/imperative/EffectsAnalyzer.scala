@@ -201,13 +201,41 @@ trait EffectsAnalyzer extends oo.CachingPhase {
   }
   
   /**
-   * This computes which parameters can be mutated when calling the function
-   * With our simple model, it can only be parameters passed by mutable reference.
+   * This computes which parameters are passed by mutable reference.
    */
-  def mutatedParams(params: Seq[ValDef]): Seq[ValDef] = params.filter(_.tpe match {
+  def refMutParams(params: Seq[ValDef]): Seq[ValDef] = params.filter(_.tpe match {
     case _: RefMutType => true
     case _ => false
   })
+
+  /**
+   * This computes which parameters are passed by reference.
+   */
+  def refParams(params: Seq[ValDef]): Seq[ValDef] = params.filter(_.tpe match {
+    case _: RefType => true
+    case _ => false
+  })
+
+  /**
+   * This computes which parameters are passed by value (i.e. not by reference).
+   */
+  def byValParams(params: Seq[ValDef]): Seq[ValDef] = params.filter(_.tpe match {
+    case _: RefType => false
+    case _: RefMutType => false
+    case _ => true
+  })
+
+  /**
+   * This type is used to split the types according to their categories
+   * (by val, by reference, by mutable reference)
+   */
+  type Split[+T] = (Seq[T], Seq[T], Seq[T])
+
+  /**
+   * This function splits the params into their categories
+   */
+  def split(params: Seq[ValDef]): Split[ValDef] =
+    (byValParams(params), refParams(params), refMutParams(params))
 
   /**
    * Returns whether the function can return a value that refers to some of its environment,

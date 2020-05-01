@@ -18,6 +18,11 @@ object Test {
     p.deref.x += dx
   }
 
+  def shiftXByValue(p: Point, dx: BigInt): Point = {
+    p.x += dx
+    p
+  }
+
   // The shiftX function is transformed into a function that returns the shifted point :
   // def shiftX(p: Point, dx: BigInt): Point = {
   //   Point(p.x + dx, p.y)

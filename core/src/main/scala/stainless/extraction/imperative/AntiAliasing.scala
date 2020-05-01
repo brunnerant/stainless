@@ -51,25 +51,37 @@ trait AntiAliasing
 
     /** Returns a function type whose return type reflects effects */
     def getFunctionType(fd: FunAbstraction): FunctionType =
-      FunctionType(fd.params.map(_.tpe), getReturnType(mutatedParams(fd.params), fd.returnType))
+      FunctionType(fd.params.map(_.tpe), getReturnType(refMutParams(fd.params), fd.returnType))
 
     /**
      * Given the mutated parameters of a function and its body, wraps the body by creating
      * variables (var) for each mutated param, and returning them in a tuple along with
      * the value returned by the original body.
      */
-    def wrapBody(body: Expr, mut: Seq[ValDef], env: EffectsEnv): Expr = {
-      val freshLocals: Seq[ValDef] = mut.map(v => RefRemover.transform(v.freshen))
-      val freshSubst = mut.zip(freshLocals).map(p => p._1.toVariable -> p._2.toVariable).toMap
+    def wrapBody(body: Expr, params: Split[ValDef], env: EffectsEnv): Expr = {
+      val (byVal, byRef, byRefMut) = params
+
+      val freshByVal = byVal.map(v => RefRemover.transform(v.freshen))
+      val freshByRef = byRef.map(v => RefRemover.transform(v))
+      val freshByRefMut = byRefMut.map(v => RefRemover.transform(v.freshen))
+      
+      def subst(from: Seq[ValDef], to: Seq[ValDef]): Map[Variable, Variable] =
+        from.zip(to).map(p => p._1.toVariable -> p._2.toVariable).toMap
+
+      val freshSubst = subst(byVal, freshByVal) ++ subst(byRef, freshByRef) ++ subst(byRefMut, freshByRefMut)
+
       val freshBody = exprOps.replaceFromSymbols(freshSubst, body)
-      val explicitBody = makeSideEffectsExplicit(freshBody, env.withRoots(freshLocals.toSet))
+      val newEnv = env.withRoots((freshByVal ++ freshByRefMut).toSet)
+      val explicitBody = makeSideEffectsExplicit(freshBody, newEnv)
 
       //WARNING: only works if side effects in Tuples are extracted from left to right,
       //         in the ImperativeTransformation phase.
-      val finalBody: Expr = Tuple(explicitBody +: freshLocals.map(_.toVariable)).copiedFrom(body)
+      val finalBody: Expr =
+        if (byRefMut.isEmpty) explicitBody
+        else Tuple(explicitBody +: freshByRefMut.map(_.toVariable)).copiedFrom(body)
 
-      freshLocals.zip(mut).foldRight(finalBody) {
-        (bd, vp) => LetVar(vp._1, RefRemover.transform(vp._2.toVariable), bd).copiedFrom(body)
+      (freshByVal ++ freshByRefMut).zip(byVal ++ byRefMut).foldRight(finalBody) {
+        (vp, bd) => LetVar(vp._1, RefRemover.transform(vp._2.toVariable), bd).copiedFrom(body)
       }
     }
 
@@ -84,10 +96,10 @@ trait AntiAliasing
      * they receive).
      */
     def updateFunction(fd: FunAbstraction, env: EffectsEnv): FunAbstraction = {
-      val mut = mutatedParams(fd.params)
+      val splitParams @ (byVal, _, byRefMut) = split(fd.params)
 
       // The function now returns the mutated params, so the return types needs to be reflected
-      val newReturnType = getReturnType(mut, fd.returnType)
+      val newReturnType = getReturnType(byRefMut, fd.returnType)
 
       val newFd = fd.copy(
         returnType = newReturnType,
@@ -95,32 +107,26 @@ trait AntiAliasing
         tparams = fd.tparams.map(RefRemover.transform)
       )
 
-      if (mut.isEmpty) newFd.copy(fullBody = makeSideEffectsExplicit(fd.fullBody, env))
-      else {
-        val (specs, body) = exprOps.deconstructSpecs(fd.fullBody)
-        val freshLocals: Seq[ValDef] = mut.map(v => RefRemover.transform(v.freshen))
-        val freshSubst = mut.zip(freshLocals).map(p => p._1.toVariable -> p._2.toVariable).toMap
+      val (specs, body) = exprOps.deconstructSpecs(fd.fullBody)
+      val newBody = body.map(wrapBody(_, splitParams, env))
 
-        val newBody = body.map(wrapBody(_, mut, env))
+      val newSpecs = specs.map {
+        case exprOps.Postcondition(post @ Lambda(Seq(res), postBody)) =>
+          val newRes = ValDef(res.id.freshen, newFd.returnType).copiedFrom(res)
+          val newBody = exprOps.replaceSingle(
+            byRefMut.map(vd => (Old(vd.toVariable), vd.toVariable): (Expr, Expr)).toMap ++
+            byRefMut.zipWithIndex.map { case (vd, i) =>
+              (vd.toVariable, TupleSelect(newRes.toVariable, i + 2).copiedFrom(vd)): (Expr, Expr)
+            }.toMap + (res.toVariable -> TupleSelect(newRes.toVariable, 1).copiedFrom(res)),
+            makeSideEffectsExplicit(postBody, env)
+          )
 
-        val newSpecs = specs.map {
-          case exprOps.Postcondition(post @ Lambda(Seq(res), postBody)) =>
-            val newRes = ValDef(res.id.freshen, newFd.returnType).copiedFrom(res)
-            val newBody = exprOps.replaceSingle(
-              mut.map(vd => (Old(vd.toVariable), vd.toVariable): (Expr, Expr)).toMap ++
-              mut.zipWithIndex.map { case (vd, i) =>
-                (vd.toVariable, TupleSelect(newRes.toVariable, i+2).copiedFrom(vd)): (Expr, Expr)
-              }.toMap + (res.toVariable -> TupleSelect(newRes.toVariable, 1).copiedFrom(res)),
-              makeSideEffectsExplicit(postBody, env)
-            )
+          exprOps.Postcondition(Lambda(Seq(newRes), newBody).copiedFrom(post))
 
-            exprOps.Postcondition(Lambda(Seq(newRes), newBody).copiedFrom(post))
-
-          case spec => spec
-        }
-
-        newFd.copy(fullBody = exprOps.reconstructSpecs(newSpecs, newBody, newFd.returnType))
+        case spec => spec
       }
+
+      newFd.copy(fullBody = exprOps.reconstructSpecs(newSpecs, newBody, newFd.returnType))
     }
 
     //We turn all local val of mutable objects into vars and explicit side effects
@@ -133,7 +139,7 @@ trait AntiAliasing
         override type Env = EffectsEnv
 
         def mapApplication(params: Seq[ValDef], args: Seq[Expr], fi: Expr, env: Env): Expr = {
-          val mut = mutatedParams(params)
+          val mut = refMutParams(params)
 
           // We only need to do something if the function has effects on its arguments
           if (mut.isEmpty) fi
@@ -211,12 +217,7 @@ trait AntiAliasing
             )
 
           case l @ Lambda(params, body) =>
-            val mut = mutatedParams(params)
-
-            if (mut.isEmpty)
-              Lambda(params, transform(body, env)).copiedFrom(l)
-            else
-              Lambda(params, wrapBody(body, mut, env)).copiedFrom(l)
+            Lambda(params, wrapBody(body, split(params), env)).copiedFrom(l)
 
           case fi @ FunctionInvocation(id, tps, args) =>
             val nfi = FunctionInvocation(id, tps, args.map(transform(_, env))).copiedFrom(fi)
@@ -249,16 +250,18 @@ trait AntiAliasing
           case Operator(es, recons) =>
             recons(es.map(transform(_, env)))
         }).copiedFrom(e)
+
+        override def transform(tpe: Type, env: EffectsEnv): Type =
+          RefRemover.transform(tpe)
       }
 
-      RefRemover.transform(transformer.transform(body, env))
+      transformer.transform(body, env)
     }
 
     // Given a receiver object (mutable class, array or map, usually as a reference id),
     // and a path of field/index access, build a copy of the original object, with
     // properly updated values
     def applyEffect(effect: Effect): Expr = {
-      println(s"applying effect $effect")
       val newValue = effect.value
 
       def rec(receiver: Expr, path: Seq[Accessor]): Expr = path match {
