@@ -112,7 +112,7 @@ trait EffectsAnalyzer extends oo.CachingPhase {
     def propagateTarget(t: Target): Set[Target] =
       variables.get(t.receiver)
         .map(ts => ts.map(_.append(t)))
-        .getOrElse(throw MalformedStainlessCode(t.receiver, s"Unknown variable ${t.receiver}"))
+        .getOrElse(throw MalformedStainlessCode(t.receiver, s"${t.receiver} cannot be mutated"))
 
     def +(mappings: Map[Variable, Set[Target]]): EffectsEnv = copy(variables = variables ++ mappings)
   }
@@ -197,6 +197,9 @@ trait EffectsAnalyzer extends oo.CachingPhase {
       case RefMut(e) => rec(e, path)
       case Deref(e) => rec(e, path)
 
+      // In blocks, the last expression is the only one that matters
+      case Block(_, last) => rec(last, path)
+
       // For now this case allows to catch all unimplemented features nicely
       case _ => error(expr)
     }
@@ -210,22 +213,6 @@ trait EffectsAnalyzer extends oo.CachingPhase {
     case ta: TypeApply => typeToAccessor(ta.getType, id)
     case _ => throw FatalError(s"Cannot have accessors over type $tpe")
   }
-  
-  /**
-   * This computes which parameters are passed by mutable reference.
-   */
-  def refMutParams(params: Seq[ValDef]): Seq[ValDef] = params.filter(_.tpe match {
-    case _: RefMutType => true
-    case _ => false
-  })
-
-  /**
-   * This computes which parameters are passed by reference.
-   */
-  def refParams(params: Seq[ValDef]): Seq[ValDef] = params.filter(_.tpe match {
-    case _: RefType => true
-    case _ => false
-  })
 
   /**
    * This computes which parameters are passed by value (i.e. not by reference).
@@ -234,6 +221,22 @@ trait EffectsAnalyzer extends oo.CachingPhase {
     case _: RefType => false
     case _: RefMutType => false
     case _ => true
+  })
+
+  /**
+   * This computes which parameters are passed by reference.
+   */
+  def byRefParams(params: Seq[ValDef]): Seq[ValDef] = params.filter(_.tpe match {
+    case _: RefType => true
+    case _ => false
+  })
+
+  /**
+   * This computes which parameters are passed by mutable reference.
+   */
+  def byRefMutParams(params: Seq[ValDef]): Seq[ValDef] = params.filter(_.tpe match {
+    case _: RefMutType => true
+    case _ => false
   })
 
   /**
@@ -246,7 +249,7 @@ trait EffectsAnalyzer extends oo.CachingPhase {
    * This function splits the params into their categories
    */
   def split(params: Seq[ValDef]): SplitParams =
-    (byValParams(params), refParams(params), refMutParams(params))
+    (byValParams(params), byRefParams(params), byRefMutParams(params))
 
   /**
    * Returns whether the function can return a value that refers to some of its environment,

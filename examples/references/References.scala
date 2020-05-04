@@ -20,6 +20,9 @@ object Test {
     p.deref.x == old(p).deref.x + dx
   }
 
+  // It is also possible to mutate a parameter that was passed by value. Since we assume
+  // that such parameters are never used once passed to the function, we don't need to return
+  // their new state at the end of the function.
   def shiftXByValue(p: Point, dx: BigInt): Point = {
     p.x += dx
     p
@@ -29,4 +32,14 @@ object Test {
   // def shiftX(p: Point, dx: BigInt): Point = {
   //   Point(p.x + dx, p.y)
   // }
+
+  def weird(p1: Point, p2: Point, cond: Boolean): Unit = {
+    (if (cond) {
+      p2.y -= 1
+      p1
+    } else {
+      p1.y -= 1
+      p2
+    }).x = 1
+  }
 }

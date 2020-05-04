@@ -51,7 +51,7 @@ trait AntiAliasing
 
     /** Returns a function type whose return type reflects effects */
     def getFunctionType(fd: FunAbstraction): FunctionType =
-      FunctionType(fd.params.map(_.tpe), getReturnType(refMutParams(fd.params), fd.returnType))
+      FunctionType(fd.params.map(_.tpe), getReturnType(byRefMutParams(fd.params), fd.returnType))
 
     /**
      * Given the mutated parameters of a function and its body, wraps the body by creating
@@ -148,19 +148,19 @@ trait AntiAliasing
         override type Env = EffectsEnv
 
         def mapApplication(params: Seq[ValDef], args: Seq[Expr], fi: Expr, env: Env): Expr = {
-          val mut = refMutParams(params)
+          val byRefMut = byRefMutParams(params)
 
           // We only need to do something if the function has effects on its arguments
-          if (mut.isEmpty) fi
+          if (byRefMut.isEmpty) fi
           else {
             // The return type needs to be updated
-            val returnType = getReturnType(mut, fi.getType)
+            val returnType = getReturnType(byRefMut, fi.getType)
 
             // We create an intermediate variable to store the result
             val res = ValDef.fresh("res", returnType).copiedFrom(fi)
 
             // For each mutated arg, we extract its new value from the result
-            val extractMutations = mut.zipWithIndex.flatMap { case (vd, index) =>
+            val extractMutations = byRefMut.zipWithIndex.flatMap { case (vd, index) =>
               val arg = args(params.indexOf(vd))
               val targets = getTargets(arg, env)
               targets.map { t =>
@@ -196,8 +196,8 @@ trait AntiAliasing
             LetRec(nfds, transform(body, newEnv)).copiedFrom(l)
 
           case up @ ArrayUpdate(a, i, v) =>
-            val idx = ValDef.fresh("idx", i.getType)
-            val rhs = ValDef.fresh("rhs", v.getType)
+            val idx = ValDef.fresh("idx", RefRemover.transform(i.getType))
+            val rhs = ValDef.fresh("rhs", RefRemover.transform(v.getType))
 
             val effects = getTargets(a, env).map(t => Effect(t :+ ArrayAccessor(idx.toVariable), rhs.toVariable))
             val assignments = Block(effects.toSeq.map(applyEffect), UnitLiteral())
@@ -208,8 +208,8 @@ trait AntiAliasing
             )
 
           case up @ MutableMapUpdate(map, k, v) =>
-            val key = ValDef.fresh("key", k.getType)
-            val rhs = ValDef.fresh("rhs", v.getType)
+            val key = ValDef.fresh("key", RefRemover.transform(k.getType))
+            val rhs = ValDef.fresh("rhs", RefRemover.transform(v.getType))
 
             val effects = getTargets(map, env).map(t => Effect(t :+ MutableMapAccessor(key.toVariable), rhs.toVariable))
             val assignments = Block(effects.toSeq.map(applyEffect), UnitLiteral())
@@ -220,7 +220,7 @@ trait AntiAliasing
             )
 
           case as @ FieldAssignment(o, id, v) =>
-            val rhs = ValDef.fresh("rhs", v.getType)
+            val rhs = ValDef.fresh("rhs", RefRemover.transform(v.getType))
 
             val effects = getTargets(o, env).map(t => Effect(t :+ typeToAccessor(o.getType, id), rhs.toVariable))
             val assignments = Block(effects.toSeq.map(applyEffect), UnitLiteral())

@@ -82,7 +82,7 @@ trait SymbolOps extends oo.SymbolOps { self: TypeOps =>
 
     // This treats shared references as non-mutable (even though Scala semantics would allow
     // to mutate them). It must therefore come before the next case.
-    case _: Ref => false
+    case _: RefType => false
     
     case NAryType(tps, _) => tps.exists(isMutableType(_, mutableClasses))
   }
