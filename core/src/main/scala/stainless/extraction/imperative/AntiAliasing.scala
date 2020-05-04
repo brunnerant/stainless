@@ -147,15 +147,12 @@ trait AntiAliasing
         override val t: self.t.type = self.t
         override type Env = EffectsEnv
 
-        def mapApplication(params: Seq[ValDef], args: Seq[Expr], fi: Expr, env: Env): Expr = {
+        def mapApplication(params: Seq[ValDef], args: Seq[Expr], fi: Expr, returnType: Type, env: Env): Expr = {
           val byRefMut = byRefMutParams(params)
 
           // We only need to do something if the function has effects on its arguments
           if (byRefMut.isEmpty) fi
           else {
-            // The return type needs to be updated
-            val returnType = getReturnType(byRefMut, fi.getType)
-
             // We create an intermediate variable to store the result
             val res = ValDef.fresh("res", returnType).copiedFrom(fi)
 
@@ -163,10 +160,10 @@ trait AntiAliasing
             val extractMutations = byRefMut.zipWithIndex.flatMap { case (vd, index) =>
               val arg = args(params.indexOf(vd))
               val targets = getTargets(arg, env)
+
               targets.map { t =>
                 // The new value is the corresponding element of the returned tuple
-                val newValue = applyEffect(Effect(t, TupleSelect(res.toVariable, index + 2)))
-                Assignment(t.receiver, newValue)
+                applyEffect(Effect(t, TupleSelect(res.toVariable, index + 2)))
               }
             }
 
@@ -234,28 +231,36 @@ trait AntiAliasing
             Lambda(params, wrapBody(body, split(params), env)).copiedFrom(l)
 
           case fi @ FunctionInvocation(id, tps, args) =>
+            val fd = Outer(fi.tfd.fd)
+            val returnType = getReturnType(byRefMutParams(fd.params), fd.returnType)
+
             val nfi = FunctionInvocation(id, tps, args.map(transform(_, env))).copiedFrom(fi)
-            mapApplication(fd.params, args, nfi, env)
+
+            mapApplication(fd.params, args, nfi, returnType, env)
 
           case alr @ ApplyLetRec(id, tparams, tpe, tps, args) =>
             val fd = Inner(env.locals(id))
+            val returnType = getReturnType(byRefMutParams(fd.params), fd.returnType)
+
             val nfi = ApplyLetRec(
               id, tparams,
               getFunctionType(fd).copiedFrom(tpe), tps,
               args.map(transform(_, env))
             ).copiedFrom(alr)
 
-            mapApplication(fd.params, args, nfi, env)
+            mapApplication(fd.params, args, nfi, returnType, env)
 
           case app @ Application(callee, args) =>
+            val FunctionType(from, to) = callee.getType
+            val params = from.map(tpe => ValDef.fresh("x", tpe))
+            val returnType = getReturnType(byRefMutParams(params), to)
+
             val nfi = Application(
               transform(callee, env),
               args.map(transform(_, env))
             ).copiedFrom(app)
 
-            val FunctionType(from, _) = callee.getType
-            val params = from.map(tpe => ValDef.fresh("x", tpe))
-            mapApplication(params, args, nfi, env)
+            mapApplication(params, args, nfi, returnType, env)
 
           case Ref(e) => transform(e, env)
           case RefMut(e) => transform(e, env)

@@ -127,8 +127,8 @@ trait EffectsAnalyzer extends oo.CachingPhase {
    * If branching occurs, then several targets are returned.
    */
   def getTargets(expr: Expr, env: EffectsEnv)(implicit symbols: Symbols): Set[Target] = {
-    def error(expr: Expr) =
-      throw MalformedStainlessCode(expr, s"Couldn't compute targets in: $expr")
+    def error(expr: Expr, msg: String) =
+      throw MalformedStainlessCode(expr, msg)
 
     def rec(expr: Expr, path: Seq[Accessor])(implicit env: EffectsEnv): Set[Target] = expr match {
       // Variables might refer to the environment, so we need to propagate them
@@ -147,14 +147,14 @@ trait EffectsAnalyzer extends oo.CachingPhase {
         case ADTFieldAccessor(fid) +: rest =>
           rec(args(symbols.getConstructor(id).fields.indexWhere(_.id == fid)), rest)
         case _ =>
-          error(expr)
+          error(expr, "Malformed ADT accessor")
       }
 
       case ClassConstructor(ct, args) => path match {
         case ClassFieldAccessor(fid) +: rest =>
           rec(args(ct.tcd.fields.indexWhere(_.id == fid)), rest)
         case _ =>
-          error(expr)
+          error(expr, "Malformed class accessor")
       }
 
       // If-then-else's introduce conditionnal targets
@@ -173,10 +173,10 @@ trait EffectsAnalyzer extends oo.CachingPhase {
       // If the function creates aliasing, we need to keep track of it
       case fi: FunctionInvocation if createsAliasing(fi.tfd.functionType) =>
         // If the function is recursive, there is no simple way of knowing what it could return
-        if (symbols.isRecursive(fi.id)) error(expr)
+        if (symbols.isRecursive(fi.id)) error(expr, "Recursive functions returning mutable references are not allowed")
         else exprOps.withoutSpecs(symbols.simplifyLets(fi.inlined))
           .map(rec(_, path))
-          .getOrElse(error(expr))
+          .getOrElse(error(expr, "Functions returning mutable references are not allowed to have no body"))
 
       // Functions that don't create aliasing cannot create targets
       case fi: FunctionInvocation =>
@@ -201,7 +201,7 @@ trait EffectsAnalyzer extends oo.CachingPhase {
       case Block(_, last) => rec(last, path)
 
       // For now this case allows to catch all unimplemented features nicely
-      case _ => error(expr)
+      case _ => error(expr, "The target detection was not implemented for that type of expression")
     }
 
     rec(expr, Seq.empty)(env)
