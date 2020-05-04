@@ -74,10 +74,13 @@ trait EffectsAnalyzer extends oo.CachingPhase {
    * val y = x.<path>
    * then the environment will contain a pair y -> Target(x, None, <path>)
    * It also contains a map of all the local function defined in scope.
+   * It contains a map of variables to rewrite. This is use to rewrite variables with unwrapped
+   * Ref and RefMut types.
    */
   case class EffectsEnv(
     variables: Map[Variable, Set[Target]],
-    locals: Map[Identifier, LocalFunDef]
+    locals: Map[Identifier, LocalFunDef],
+    rewritings: Map[Variable, Variable]
   ) {
     // Adds or updates the targets that a variable points to
     def withVariable(v: Variable, targets: Set[Target]): EffectsEnv =
@@ -95,6 +98,14 @@ trait EffectsAnalyzer extends oo.CachingPhase {
     def withLocals(fds: Seq[LocalFunDef]): EffectsEnv =
       copy(locals = locals ++ fds.map(fd => fd.id -> fd))
 
+    // Adds a variable rewriting to the environment
+    def withRewriting(from: Variable, to: Variable): EffectsEnv =
+      copy(rewritings = rewritings + (from -> to))
+
+    // Rewrites a variable using the mappings in the environment
+    def rewrite(v: Variable): Variable =
+      rewritings.get(v).getOrElse(v)
+
     // This allows to propagate targets for variables that were already
     // declared in the environment. If the target variable is not in the
     // environment, an exception is thrown.
@@ -107,7 +118,7 @@ trait EffectsAnalyzer extends oo.CachingPhase {
   }
 
   object EffectsEnv {
-    def empty = EffectsEnv(Map.empty, Map.empty)
+    def empty = EffectsEnv(Map.empty, Map.empty, Map.empty)
   }
 
   /**

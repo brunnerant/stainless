@@ -179,11 +179,16 @@ trait AntiAliasing
           case l @ Let(vd, e, b) =>
             val recons = if (isMutableType(vd.tpe)) Let(_, _, _) else LetVar(_, _, _)
             val newVd = RefRemover.transform(vd)
-            recons(newVd, transform(e, env), transform(b, env.withVariable(newVd.toVariable, e)))
+            val newEnv = env.withVariable(vd.toVariable, e).withRewriting(vd.toVariable, newVd.toVariable)
+            recons(newVd, transform(e, env), transform(b, newEnv))
 
           case l @ LetVar(vd, e, b) =>
             val newVd = RefRemover.transform(vd)
-            LetVar(newVd, transform(e, env), transform(b, env.withVariable(newVd.toVariable, e)))
+            val newEnv = env.withVariable(vd.toVariable, e).withRewriting(vd.toVariable, newVd.toVariable)
+            LetVar(newVd, transform(e, env), transform(b, newEnv))
+
+          case v: Variable =>
+            env.rewrite(v)
 
           case l @ LetRec(fds, body) =>
             val newEnv = env withLocals fds
