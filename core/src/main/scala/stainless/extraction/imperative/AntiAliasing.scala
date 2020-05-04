@@ -58,7 +58,7 @@ trait AntiAliasing
      * variables (var) for each mutated param, and returning them in a tuple along with
      * the value returned by the original body.
      */
-    def wrapBody(body: Expr, params: Split[ValDef], env: EffectsEnv): Expr = {
+    def wrapBody(body: Expr, params: SplitParams, env: EffectsEnv): Expr = {
       val (byVal, byRef, byRefMut) = params
 
       val freshByVal = byVal.map(v => RefRemover.transform(v.freshen))
@@ -96,7 +96,7 @@ trait AntiAliasing
      * they receive).
      */
     def updateFunction(fd: FunAbstraction, env: EffectsEnv): FunAbstraction = {
-      val splitParams @ (byVal, _, byRefMut) = split(fd.params)
+      val splitParams @ (byVal, byRef, byRefMut) = split(fd.params)
 
       // The function now returns the mutated params, so the return types needs to be reflected
       val newReturnType = getReturnType(byRefMut, fd.returnType)
@@ -113,11 +113,20 @@ trait AntiAliasing
       val newSpecs = specs.map {
         case exprOps.Postcondition(post @ Lambda(Seq(res), postBody)) =>
           val newRes = ValDef(res.id.freshen, newFd.returnType).copiedFrom(res)
+
+          def freshVar(vd: ValDef): Expr =
+            RefRemover.transform(vd).toVariable
+
+          val paramSubst = (byVal ++ byRef).map(vd => (vd.toVariable: Expr) -> freshVar(vd)).toMap
+          val resultSubst = Map(res.toVariable -> TupleSelect(newRes.toVariable, 1).copiedFrom(res))
+
+          val oldSubst = byRefMut.map(vd => (Old(vd.toVariable): Expr) -> freshVar(vd)).toMap
+          val newSubst = byRefMut.zipWithIndex.map { case (vd, i) =>
+            (vd.toVariable -> TupleSelect(newRes.toVariable, i + 2).copiedFrom(vd)): (Expr, Expr)
+          }
+
           val newBody = exprOps.replaceSingle(
-            byRefMut.map(vd => (Old(vd.toVariable), vd.toVariable): (Expr, Expr)).toMap ++
-            byRefMut.zipWithIndex.map { case (vd, i) =>
-              (vd.toVariable, TupleSelect(newRes.toVariable, i + 2).copiedFrom(vd)): (Expr, Expr)
-            }.toMap + (res.toVariable -> TupleSelect(newRes.toVariable, 1).copiedFrom(res)),
+            paramSubst ++ resultSubst ++ oldSubst ++ newSubst,
             makeSideEffectsExplicit(postBody, env)
           )
 

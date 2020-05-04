@@ -226,15 +226,15 @@ trait EffectsAnalyzer extends oo.CachingPhase {
   })
 
   /**
-   * This type is used to split the types according to their categories
+   * This type is used to split the parameters of a function according to their categories
    * (by val, by reference, by mutable reference)
    */
-  type Split[+T] = (Seq[T], Seq[T], Seq[T])
+  type SplitParams = (Seq[ValDef], Seq[ValDef], Seq[ValDef])
 
   /**
    * This function splits the params into their categories
    */
-  def split(params: Seq[ValDef]): Split[ValDef] =
+  def split(params: Seq[ValDef]): SplitParams =
     (byValParams(params), refParams(params), refMutParams(params))
 
   /**

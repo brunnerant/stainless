@@ -16,6 +16,8 @@ object Test {
   // Instead, a mutable reference should be used
   def shiftX(p: RefMut[Point], dx: BigInt): Unit = {
     p.deref.x += dx
+  } ensuring { _ =>
+    p.deref.x == old(p).deref.x + dx
   }
 
   def shiftXByValue(p: Point, dx: BigInt): Point = {
