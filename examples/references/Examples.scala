@@ -8,11 +8,6 @@ object Test {
   def diff(x: Ref[Point], y: Ref[Point]): Point =
     Point(x.deref.x - y.deref.x, x.deref.y - y.deref.y)
 
-  // Mutating a shared reference isn't allowed
-  // def shiftX(p: Ref[Point], dx: BigInt): Unit = {
-  //   p.deref.x += x
-  // }
-
   // Instead, a mutable reference should be used
   def shiftX(p: RefMut[Point], dx: BigInt): Unit = {
     p.deref.x += dx
@@ -28,11 +23,14 @@ object Test {
     p
   }
 
-  // The shiftX function is transformed into a function that returns the shifted point :
-  // def shiftX(p: Point, dx: BigInt): Point = {
-  //   Point(p.x + dx, p.y)
-  // }
+  // We can also implement shiftByValue by calling shiftX with a mutable reference
+  def shiftXByValueBis(p: Point, dx: BigInt): Point = {
+    shiftX(p.refMut, dx)
+    p
+  }
 
+  // This function is not useful, but it shows that the translation is somewhat
+  // resistant to weird inputs
   def weird(p1: Point, p2: Point, cond: Boolean): Unit = {
     (if (cond) {
       p2.y -= 1
@@ -41,5 +39,19 @@ object Test {
       p1.y -= 1
       p2
     }).x = 1
+  }
+
+  def switch(n: BigInt, p1: RefMut[Point], p2: RefMut[Point]): RefMut[Point] =
+    if (n % 2 == 0) p1 else p2
+
+  // def switch(n: BigInt, p1: RefMut[Point], p2: RefMut[Point]): RefMut[Point] =
+  //   if (n <= 0) p1 else switch(n - 1, p2, p1)
+
+  def aliasing(n: BigInt): (Point, Point) = {
+    val p1 = Point(0, 0)
+    val p2 = Point(1, 1)
+    val p3 = switch(n, p1.refMut, p2.refMut)
+    p3.deref.x = 2
+    (p1, p2)
   }
 }

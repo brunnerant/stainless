@@ -87,8 +87,11 @@ trait EffectsAnalyzer extends oo.CachingPhase {
       copy(variables = variables + (v -> targets))
 
     // This version is useful for let bindings
-    def withVariable(v: Variable, value: Expr)(implicit symbols: Symbols): EffectsEnv =
-      withVariable(v, getTargets(value, this))
+    def withVariable(v: Variable, value: Expr)(implicit symbols: Symbols): EffectsEnv = {
+      val targets = getTargets(value, this)
+      if (targets.isEmpty) withVariable(v, Set(Target(v, None, Path.empty)))
+      else withVariable(v, targets)
+    }
 
     // This is useful for adding variables that are roots (i.e. don't refer to anything else than themselves)
     def withRoots(vs: Set[ValDef]): EffectsEnv =
@@ -147,14 +150,14 @@ trait EffectsAnalyzer extends oo.CachingPhase {
         case ADTFieldAccessor(fid) +: rest =>
           rec(args(symbols.getConstructor(id).fields.indexWhere(_.id == fid)), rest)
         case _ =>
-          error(expr, "Malformed ADT accessor")
+          Set.empty
       }
 
       case ClassConstructor(ct, args) => path match {
         case ClassFieldAccessor(fid) +: rest =>
           rec(args(ct.tcd.fields.indexWhere(_.id == fid)), rest)
         case _ =>
-          error(expr, "Malformed class accessor")
+          Set.empty
       }
 
       // If-then-else's introduce conditionnal targets
