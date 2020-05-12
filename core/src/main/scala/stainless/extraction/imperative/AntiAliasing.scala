@@ -107,9 +107,12 @@ trait AntiAliasing
         tparams = fd.tparams.map(RefRemover.transform)
       )
 
+      // We wrap the body in var definitions for the parameters that could be mutated,
+      // and we return the mutated references in a tuple along with the original result.
       val (specs, body) = exprOps.deconstructSpecs(fd.fullBody)
       val newBody = body.map(wrapBody(_, splitParams, env))
 
+      // The postconditions need to be changed as well
       val newSpecs = specs.map {
         case exprOps.Postcondition(post @ Lambda(Seq(res), postBody)) =>
           val newRes = ValDef(res.id.freshen, newFd.returnType).copiedFrom(res)
@@ -117,10 +120,19 @@ trait AntiAliasing
           def freshVar(vd: ValDef): Expr =
             RefRemover.transform(vd).toVariable
 
+          // We replace the by-val and by-refMut parameters so that they refer to the new parameters
+          // (the ones with references erased).
           val paramSubst = (byVal ++ byRef).map(vd => (vd.toVariable: Expr) -> freshVar(vd)).toMap
-          val resultSubst = Map(res.toVariable -> TupleSelect(newRes.toVariable, 1).copiedFrom(res))
 
+          // If the new return type was wrapped in a tuple, we need to refer to the first element
+          val resultSubst =
+            if (byRef.isEmpty) Map(res.toVariable -> newRes.toVariable)
+            else Map(res.toVariable -> TupleSelect(newRes.toVariable, 1).copiedFrom(res))
+
+          // old(p) refers to p, now that mutations are explicit
           val oldSubst = byRefMut.map(vd => (Old(vd.toVariable): Expr) -> freshVar(vd)).toMap
+
+          // The new values are in the returned tuple, so we replace them
           val newSubst = byRefMut.zipWithIndex.map { case (vd, i) =>
             (vd.toVariable -> TupleSelect(newRes.toVariable, i + 2).copiedFrom(vd)): (Expr, Expr)
           }

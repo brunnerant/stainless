@@ -27,6 +27,8 @@ object Test {
   def shiftXByValueBis(p: Point, dx: BigInt): Point = {
     shiftX(p.refMut, dx)
     p
+  } ensuring { res =>
+    res == shiftXByValue(old(p), dx)
   }
 
   // This function is not useful, but it shows that the translation is somewhat
