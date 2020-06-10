@@ -72,6 +72,7 @@ trait AntiAliasing
       val freshSubst = subst(byVal, freshByVal) ++ subst(byRef, freshByRef) ++ subst(byRefMut, freshByRefMut)
 
       val freshBody = exprOps.replaceFromSymbols(freshSubst, body)
+      println(freshBody)
       val newEnv = env.withRoots((freshByVal ++ freshByRefMut).toSet)
       val explicitBody = makeSideEffectsExplicit(freshBody, newEnv)
 
@@ -185,6 +186,11 @@ trait AntiAliasing
         }
 
         override def transform(e: Expr, env: Env): Expr = (e match {
+          // Those ASTs are only for inference, but we don't keep them
+          case Ref(e) => transform(e, env)
+          case RefMut(e) => transform(e, env)
+          case Deref(e) => transform(e, env)
+
           // Let and LetVar add new mappings to the environment
           case l @ Let(vd, e, b) =>
             val newVd = refRemover.transform(vd)
@@ -230,7 +236,7 @@ trait AntiAliasing
 
           case as @ FieldAssignment(o, id, v) =>
             val rhs = ValDef.fresh("rhs", refRemover.transform(v.getType))
-
+            
             val effects = getTargets(o, env).map(t => Effect(t :+ typeToAccessor(o.getType, id), rhs.toVariable))
             val assignments = Block(effects.toSeq.map(applyEffect), UnitLiteral())
 
@@ -274,10 +280,6 @@ trait AntiAliasing
 
             mapApplication(params, args, nfi, returnType, env)
 
-          case Ref(e) => transform(e, env)
-          case RefMut(e) => transform(e, env)
-          case Deref(e) => transform(e, env)
-
           case Operator(es, recons) =>
             recons(es.map(transform(_, env)))
         }).copiedFrom(e)
@@ -313,7 +315,7 @@ trait AntiAliasing
           }
 
           val (cd, ct) = optCd.map(cd => (cd, cd.toType)).getOrElse {
-            throw FatalError(s"Could find class for type ${receiver.getType}")
+            throw FatalError(s"Couldn't find class for type ${receiver.getType}")
           }
 
           val casted = AsInstanceOf(receiver, cd.toType).copiedFrom(receiver)

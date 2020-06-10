@@ -155,9 +155,15 @@ trait Trees extends oo.Trees with Definitions { self =>
     }
   }
 
+  def isDeref(field: Identifier, qualifiedName: String)(implicit symbols: Symbols): Boolean =
+    symbols.lookup.get[ClassDef](qualifiedName).map(_.fields(0).id == field).getOrElse(false)
+
   /** Extractor for dereference expressions */
   object Deref {
     def unapply(expr: Expr)(implicit symbols: Symbols): Option[Expr] = expr match {
+      case ClassSelector(e, field) =>
+        if (isDeref(field, "stainless.lang.RefMut") || isDeref(field, "stainless.lang.Ref")) Some(e)
+        else None
       case _ => None
     }
   }

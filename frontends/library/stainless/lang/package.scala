@@ -154,7 +154,6 @@ package object lang {
 
   case class RefMut[T](var deref: T)
 
-  @ignore
   implicit class AsValue[T](private val value: T) {
     @inline def ref: Ref[T] = Ref(value)
     @inline def refMut: RefMut[T] = RefMut(value)

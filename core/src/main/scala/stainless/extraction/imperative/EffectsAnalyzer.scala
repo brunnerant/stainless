@@ -137,6 +137,12 @@ trait EffectsAnalyzer extends oo.CachingPhase {
       // Variables might refer to the environment, so we need to propagate them
       case v: Variable =>
         env.propagateTarget(Target(v, None, Path(path)))
+
+      // The reference ASTs are only a mean to gather more information, they are aren't
+      // semantically useful
+      case Ref(e) => rec(e, path)
+      case RefMut(e) => rec(e, path)
+      case Deref(e) => rec(e, path)
       
       // Those are the ways a path can increase
       case ADTSelector(e, id) => rec(e, ADTFieldAccessor(id) +: path)
@@ -193,12 +199,6 @@ trait EffectsAnalyzer extends oo.CachingPhase {
       case LetVar(vd, e, b) =>
         val exprTargets = rec(e, Seq.empty)
         rec(b, path)(env + Map(vd.toVariable -> exprTargets))
-
-      // The reference ASTs are only a mean to gather more information, they are aren't
-      // semantically useful
-      case Ref(e) => rec(e, path)
-      case RefMut(e) => rec(e, path)
-      case Deref(e) => rec(e, path)
 
       // In blocks, the last expression is the only one that matters
       case Block(_, last) => rec(last, path)
