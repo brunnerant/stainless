@@ -220,25 +220,25 @@ trait EffectsAnalyzer extends oo.CachingPhase {
   /**
    * This computes which parameters are passed by value (i.e. not by reference).
    */
-  def byValParams(params: Seq[ValDef]): Seq[ValDef] = params.filter(_.tpe match {
-    case _: RefType => false
-    case _: RefMutType => false
+  def byValParams(params: Seq[ValDef])(implicit symbols: Symbols): Seq[ValDef] = params.filter(_.tpe match {
+    case RefType(_) => false
+    case RefMutType(_) => false
     case _ => true
   })
 
   /**
    * This computes which parameters are passed by reference.
    */
-  def byRefParams(params: Seq[ValDef]): Seq[ValDef] = params.filter(_.tpe match {
-    case _: RefType => true
+  def byRefParams(params: Seq[ValDef])(implicit symbols: Symbols): Seq[ValDef] = params.filter(_.tpe match {
+    case RefType(_) => true
     case _ => false
   })
 
   /**
    * This computes which parameters are passed by mutable reference.
    */
-  def byRefMutParams(params: Seq[ValDef]): Seq[ValDef] = params.filter(_.tpe match {
-    case _: RefMutType => true
+  def byRefMutParams(params: Seq[ValDef])(implicit symbols: Symbols): Seq[ValDef] = params.filter(_.tpe match {
+    case RefMutType(_) => true
     case _ => false
   })
 
@@ -251,7 +251,7 @@ trait EffectsAnalyzer extends oo.CachingPhase {
   /**
    * This function splits the params into their categories
    */
-  def split(params: Seq[ValDef]): SplitParams =
+  def split(params: Seq[ValDef])(implicit symbols: Symbols): SplitParams =
     (byValParams(params), byRefParams(params), byRefMutParams(params))
 
   /**
@@ -259,8 +259,8 @@ trait EffectsAnalyzer extends oo.CachingPhase {
    * and that can be mutated. In our simple model, it is only the case if the function
    * returns a mutable reference.
    */
-  def createsAliasing(ft: FunctionType): Boolean = ft.to match {
-    case _: RefMutType => true
+  def createsAliasing(ft: FunctionType)(implicit symbols: Symbols): Boolean = ft.to match {
+    case RefMutType(_) => true
     case _ => false
   }
 }

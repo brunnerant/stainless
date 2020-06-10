@@ -136,13 +136,6 @@ class XLangSerializer(override val trees: extraction.xlang.Trees, serializeProdu
       classSerializer[MutableMapUpdated]      (236),
       classSerializer[MutableMapDuplicate]    (237),
 
-      // My-imperative trees
-      classSerializer[Ref]              (244),
-      classSerializer[RefMut]           (245),
-      classSerializer[Deref]            (246),
-      classSerializer[RefType]          (247),
-      classSerializer[RefMutType]       (248),
-
       // Object-oriented trees
       classSerializer[ClassConstructor] (200),
       classSerializer[ClassSelector]    (201),

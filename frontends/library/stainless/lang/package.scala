@@ -150,19 +150,13 @@ package object lang {
    * Those three classes are used to provide explicit anntations about
    * the type of references. This is an experiment for imperative code translation.
    */
-  @ignore
-  case class Ref[T] private (private val value: T) {
-    def deref: T = value
-  }
+  case class Ref[T](deref: T)
 
-  @ignore
-  case class RefMut[T] private (private val value: T) {
-    def deref: T = value
-  }
+  case class RefMut[T](var deref: T)
 
   @ignore
   implicit class AsValue[T](private val value: T) {
-    def ref: Ref[T] = Ref(value)
-    def refMut: RefMut[T] = RefMut(value)
+    @inline def ref: Ref[T] = Ref(value)
+    @inline def refMut: RefMut[T] = RefMut(value)
   }
 }

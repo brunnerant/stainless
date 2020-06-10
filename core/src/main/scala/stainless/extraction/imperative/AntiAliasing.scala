@@ -26,7 +26,7 @@ trait AntiAliasing
     symbols.withFunctions(functions)
 
   /** This transformer can be used to remove the explicit references */
-  object RefRemover extends SelfTreeTransformer {
+  class RefRemover(implicit symbols: Symbols) extends SelfTreeTransformer {
     override def transform(expr: Expr): Expr = expr match {
       case Ref(e) => transform(e)
       case RefMut(e) => transform(e)
@@ -44,10 +44,11 @@ trait AntiAliasing
 
   override protected def extractFunction(symbols: Symbols, fd: FunDef): FunctionResult = {
     import symbols._
+    val refRemover = new RefRemover()(symbols)
 
     /** Returns the new return type of a function having effects */
     def getReturnType(mutatedParams: Seq[ValDef], returnType: Type): Type =
-      RefRemover.transform(tupleTypeWrap(returnType +: mutatedParams.map(_.tpe)))
+      refRemover.transform(tupleTypeWrap(returnType +: mutatedParams.map(_.tpe)))
 
     /** Returns a function type whose return type reflects effects */
     def getFunctionType(fd: FunAbstraction): FunctionType =
@@ -61,9 +62,9 @@ trait AntiAliasing
     def wrapBody(body: Expr, params: SplitParams, env: EffectsEnv): Expr = {
       val (byVal, byRef, byRefMut) = params
 
-      val freshByVal = byVal.map(v => RefRemover.transform(v.freshen))
-      val freshByRef = byRef.map(v => RefRemover.transform(v))
-      val freshByRefMut = byRefMut.map(v => RefRemover.transform(v.freshen))
+      val freshByVal = byVal.map(v => refRemover.transform(v.freshen))
+      val freshByRef = byRef.map(v => refRemover.transform(v))
+      val freshByRefMut = byRefMut.map(v => refRemover.transform(v.freshen))
       
       def subst(from: Seq[ValDef], to: Seq[ValDef]): Map[Variable, Variable] =
         from.zip(to).map(p => p._1.toVariable -> p._2.toVariable).toMap
@@ -81,7 +82,7 @@ trait AntiAliasing
         else Tuple(explicitBody +: freshByRefMut.map(_.toVariable)).copiedFrom(body)
 
       (freshByVal ++ freshByRefMut).zip(byVal ++ byRefMut).foldRight(finalBody) {
-        (vp, bd) => LetVar(vp._1, RefRemover.transform(vp._2.toVariable), bd).copiedFrom(body)
+        (vp, bd) => LetVar(vp._1, refRemover.transform(vp._2.toVariable), bd).copiedFrom(body)
       }
     }
 
@@ -103,8 +104,8 @@ trait AntiAliasing
 
       val newFd = fd.copy(
         returnType = newReturnType,
-        params = fd.params.map(RefRemover.transform),
-        tparams = fd.tparams.map(RefRemover.transform)
+        params = fd.params.map(refRemover.transform),
+        tparams = fd.tparams.map(refRemover.transform)
       )
 
       // We wrap the body in var definitions for the parameters that could be mutated,
@@ -118,7 +119,7 @@ trait AntiAliasing
           val newRes = ValDef(res.id.freshen, newFd.returnType).copiedFrom(res)
 
           def freshVar(vd: ValDef): Expr =
-            RefRemover.transform(vd).toVariable
+            refRemover.transform(vd).toVariable
 
           // We replace the by-val and by-refMut parameters so that they refer to the new parameters
           // (the ones with references erased).
@@ -186,12 +187,12 @@ trait AntiAliasing
         override def transform(e: Expr, env: Env): Expr = (e match {
           // Let and LetVar add new mappings to the environment
           case l @ Let(vd, e, b) =>
-            val newVd = RefRemover.transform(vd)
+            val newVd = refRemover.transform(vd)
             val newEnv = env.withVariable(vd.toVariable, e).withRewriting(vd.toVariable, newVd.toVariable)
             LetVar(newVd, transform(e, env), transform(b, newEnv))
 
           case l @ LetVar(vd, e, b) =>
-            val newVd = RefRemover.transform(vd)
+            val newVd = refRemover.transform(vd)
             val newEnv = env.withVariable(vd.toVariable, e).withRewriting(vd.toVariable, newVd.toVariable)
             LetVar(newVd, transform(e, env), transform(b, newEnv))
 
@@ -204,8 +205,8 @@ trait AntiAliasing
             LetRec(nfds, transform(body, newEnv)).copiedFrom(l)
 
           case up @ ArrayUpdate(a, i, v) =>
-            val idx = ValDef.fresh("idx", RefRemover.transform(i.getType))
-            val rhs = ValDef.fresh("rhs", RefRemover.transform(v.getType))
+            val idx = ValDef.fresh("idx", refRemover.transform(i.getType))
+            val rhs = ValDef.fresh("rhs", refRemover.transform(v.getType))
 
             val effects = getTargets(a, env).map(t => Effect(t :+ ArrayAccessor(idx.toVariable), rhs.toVariable))
             val assignments = Block(effects.toSeq.map(applyEffect), UnitLiteral())
@@ -216,8 +217,8 @@ trait AntiAliasing
             )
 
           case up @ MutableMapUpdate(map, k, v) =>
-            val key = ValDef.fresh("key", RefRemover.transform(k.getType))
-            val rhs = ValDef.fresh("rhs", RefRemover.transform(v.getType))
+            val key = ValDef.fresh("key", refRemover.transform(k.getType))
+            val rhs = ValDef.fresh("rhs", refRemover.transform(v.getType))
 
             val effects = getTargets(map, env).map(t => Effect(t :+ MutableMapAccessor(key.toVariable), rhs.toVariable))
             val assignments = Block(effects.toSeq.map(applyEffect), UnitLiteral())
@@ -228,7 +229,7 @@ trait AntiAliasing
             )
 
           case as @ FieldAssignment(o, id, v) =>
-            val rhs = ValDef.fresh("rhs", RefRemover.transform(v.getType))
+            val rhs = ValDef.fresh("rhs", refRemover.transform(v.getType))
 
             val effects = getTargets(o, env).map(t => Effect(t :+ typeToAccessor(o.getType, id), rhs.toVariable))
             val assignments = Block(effects.toSeq.map(applyEffect), UnitLiteral())
@@ -282,7 +283,7 @@ trait AntiAliasing
         }).copiedFrom(e)
 
         override def transform(tpe: Type, env: EffectsEnv): Type =
-          RefRemover.transform(tpe)
+          refRemover.transform(tpe)
       }
 
       transformer.transform(body, env)
@@ -359,10 +360,10 @@ trait AntiAliasing
   }
 
   override protected def extractSort(symbols: Symbols, sort: ADTSort): SortResult =
-    RefRemover.transform(sort)
+    new RefRemover()(symbols).transform(sort)
 
   override protected def extractClass(symbols: Symbols, cd: ClassDef): ClassResult =
-    RefRemover.transform(cd)
+    new RefRemover()(symbols).transform(cd)
 }
 
 object AntiAliasing {

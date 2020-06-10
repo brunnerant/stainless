@@ -79,11 +79,6 @@ trait SymbolOps extends oo.SymbolOps { self: TypeOps =>
     case adt: ADTType => isMutableADTType(adt, mutableClasses)
     case ta: TypeApply if ta.isAbstract => ta.getTypeDef.flags contains IsMutable
     case ta: TypeApply => isMutableType(ta.getType, mutableClasses)
-
-    // This treats shared references as non-mutable (even though Scala semantics would allow
-    // to mutate them). It must therefore come before the next case.
-    case _: RefType => false
-    
     case NAryType(tps, _) => tps.exists(isMutableType(_, mutableClasses))
   }
 

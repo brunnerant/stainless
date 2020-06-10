@@ -132,34 +132,55 @@ trait Trees extends oo.Trees with Definitions { self =>
       checkAllTypes(Seq(lhs, rhs), BooleanType(), BooleanType())
   }
 
-  /** Represents the shared referencing of an expression */
-  case class Ref(expr: Expr) extends Expr with CachingTyped {
-    protected def computeType(implicit s: Symbols): Type =
-      unveilUntyped(RefType(expr.getType))
-  }
+  private def isClass(ct: ClassType, qualifiedName: String)(implicit symbols: Symbols): Boolean =
+    symbols.lookup.get[ClassDef](qualifiedName).map(_.id == ct.tcd.cd.id).getOrElse(false)
 
-  /** Classes used to explicitely annotate references */
-
-  /** Represents the mutable referencing of an expression */
-  case class RefMut(expr: Expr) extends Expr with CachingTyped {
-    protected def computeType(implicit s: Symbols): Type =
-      unveilUntyped(RefMutType(expr.getType))
-  }
-
-  /** Represents the dereferencing of an expression */
-  case class Deref(expr: Expr) extends Expr with CachingTyped {
-    protected def computeType(implicit s: Symbols): Type = expr.getType match {
-      case RefType(tpe) => tpe
-      case RefMutType(tpe) => tpe
-      case _ => Untyped
+  /** Extractor for reference expressions */
+  object Ref {
+    def unapply(expr: Expr)(implicit symbols: Symbols): Option[Expr] = expr match {
+      case ClassConstructor(ct, List(e)) =>
+        if (isClass(ct, "stainless.lang.Ref")) Some(e)
+        else None
+      case _ => None
     }
   }
 
-  /** Represents the types of shared references */
-  case class RefType(tpe: Type) extends Type
+  /** Extractor for mutable reference expressions */
+  object RefMut {
+    def unapply(expr: Expr)(implicit symbols: Symbols): Option[Expr] = expr match {
+      case ClassConstructor(ct, List(e)) =>
+        if (isClass(ct, "stainless.lang.RefMut")) Some(e)
+        else None
+      case _ => None
+    }
+  }
 
-  /** Represents the types of mutable references */
-  case class RefMutType(tpe: Type) extends Type
+  /** Extractor for dereference expressions */
+  object Deref {
+    def unapply(expr: Expr)(implicit symbols: Symbols): Option[Expr] = expr match {
+      case _ => None
+    }
+  }
+
+  /** Extractor for reference types */
+  object RefType {
+    def unapply(tpe: Type)(implicit symbols: Symbols): Option[Type] = tpe match {
+      case ct: ClassType =>
+        if (isClass(ct, "stainless.lang.Ref")) Some(ct.tps(0))
+        else None
+      case _ => None
+    }
+  }
+
+  /** Extractor for mutable reference types */
+  object RefMutType {
+    def unapply(tpe: Type)(implicit symbols: Symbols): Option[Type] = tpe match {
+      case ct: ClassType =>
+        if (isClass(ct, "stainless.lang.RefMut")) Some(ct.tps(0))
+        else None
+      case _ => None
+    }
+  }
 
   object VarDef {
     def apply(id: Identifier, tpe: Type, flags: Seq[Flag]): ValDef = ValDef(id, tpe, (flags :+ IsVar).distinct)
@@ -188,6 +209,9 @@ trait Trees extends oo.Trees with Definitions { self =>
   case object IsVar extends Flag("var", Seq.empty)
   case object IsPure extends Flag("pure", Seq.empty)
   case object IsMutable extends Flag("mutable", Seq.empty)
+
+  /** This is used to tag the classes that represent references in the library */
+  case object IsRef extends Flag("ref", Seq.empty)
 
   override val exprOps: ExprOps { val trees: Trees.this.type } = new {
     protected val trees: Trees.this.type = Trees.this
@@ -278,21 +302,6 @@ trait Printer extends oo.Printer {
       p"$lhs ^ $rhs"
     }
 
-    case Ref(e) =>
-      p"$e.ref"
-
-    case RefMut(e) =>
-      p"$e.refMut"
-
-    case Deref(e) =>
-      p"$e.deref"
-
-    case RefType(t) =>
-      p"Ref[$t]"
-
-    case RefMutType(t) =>
-      p"RefMut[$t]"
-
     case _ => super.ppBody(tree)
   }
 
@@ -368,27 +377,12 @@ trait TreeDeconstructor extends oo.TreeDeconstructor {
     case s.Snapshot(e) =>
       (Seq(), Seq(), Seq(e), Seq(), Seq(), (_, _, es, _, _) => t.Snapshot(es.head))
 
-    case s.Ref(expr) =>
-      (Seq(), Seq(), Seq(expr), Seq(), Seq(), (_, _, es, _, _) => t.Ref(es(0)))
-
-    case s.RefMut(expr) =>
-      (Seq(), Seq(), Seq(expr), Seq(), Seq(), (_, _, es, _, _) => t.RefMut(es(0)))
-
-    case s.Deref(expr) =>
-      (Seq(), Seq(), Seq(expr), Seq(), Seq(), (_, _, es, _, _) => t.Deref(es(0)))
-
     case _ => super.deconstruct(e)
   }
 
   override def deconstruct(tpe: s.Type): Deconstructed[t.Type] = tpe match {
     case s.MutableMapType(from, to) => (Seq(), Seq(), Seq(), Seq(from, to), Seq(), (_, _, _, tps, _) =>
       t.MutableMapType(tps(0), tps(1)))
-
-    case s.RefType(inner) =>
-      (Seq(), Seq(), Seq(), Seq(inner), Seq(), (_, _, _, ts, _) => t.RefType(ts(0)))
-
-    case s.RefMutType(inner) =>
-      (Seq(), Seq(), Seq(), Seq(inner), Seq(), (_, _, _, ts, _) => t.RefMutType(ts(0)))
       
     case _ => super.deconstruct(tpe)
   }
