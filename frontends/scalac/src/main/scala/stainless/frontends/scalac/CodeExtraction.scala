@@ -1041,6 +1041,12 @@ trait CodeExtraction extends ASTExtractors {
     case ExTupleExtract(tuple, index) =>
       xt.TupleSelect(extractTree(tuple), index)
 
+    case ExRefExpression(expr) =>
+      xt.ClassConstructor(extractType(tr).asInstanceOf[xt.ClassType], Seq(extractTree(expr)))
+
+    case ExRefMutExpression(expr) =>
+      xt.ClassConstructor(extractType(tr).asInstanceOf[xt.ClassType], Seq(extractTree(expr)))
+
     /**
      * XLang Extractors
      */

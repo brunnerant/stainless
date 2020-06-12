@@ -151,11 +151,11 @@ package object lang {
    * the type of references. This is an experiment for imperative code translation.
    */
   case class Ref[T](deref: T)
-
   case class RefMut[T](var deref: T)
 
-  implicit class AsValue[T](private val value: T) {
-    @inline def ref: Ref[T] = Ref(value)
-    @inline def refMut: RefMut[T] = RefMut(value)
+  @ignore
+  implicit sealed class AsValue[T](private val value: T) {
+    @inline final def ref: Ref[T] = Ref(value)
+    @inline final def refMut: RefMut[T] = RefMut(value)
   }
 }

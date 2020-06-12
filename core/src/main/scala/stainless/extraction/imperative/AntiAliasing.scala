@@ -72,7 +72,6 @@ trait AntiAliasing
       val freshSubst = subst(byVal, freshByVal) ++ subst(byRef, freshByRef) ++ subst(byRefMut, freshByRefMut)
 
       val freshBody = exprOps.replaceFromSymbols(freshSubst, body)
-      println(freshBody)
       val newEnv = env.withRoots((freshByVal ++ freshByRefMut).toSet)
       val explicitBody = makeSideEffectsExplicit(freshBody, newEnv)
 

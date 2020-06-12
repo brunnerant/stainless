@@ -504,6 +504,26 @@ trait ASTExtractors {
           None
       }
     }
+    
+    /** Extracts a 'expr.ref' expression */
+    object ExRefExpression {
+      def unapply(tree: Select) : Option[Tree] = tree match {
+        case Select(Apply(TypeApply(ExSymbol("stainless", "lang", "AsValue"), List(_)), es), ExNamed("ref")) =>
+          Some(es.head)
+        case _ =>
+          None
+      }
+    }
+
+    /** Extracts a 'expr.refMut' expression */
+    object ExRefMutExpression {
+      def unapply(tree: Select) : Option[Tree] = tree match {
+        case Select(Apply(TypeApply(ExSymbol("stainless", "lang", "AsValue"), List(_)), es), ExNamed("refMut")) =>
+          Some(es.head)
+        case _ =>
+          None
+      }
+    }
 
     /** Matches an object with no type parameters, and regardless of its
       * visibility. Does not match on case objects or the automatically generated companion
