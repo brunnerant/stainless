@@ -5,6 +5,7 @@ package extraction
 package imperative
 
 import inox.utils.Position
+import scala.ref.WeakReference
 
 trait Trees extends oo.Trees with Definitions { self =>
 
@@ -132,14 +133,48 @@ trait Trees extends oo.Trees with Definitions { self =>
       checkAllTypes(Seq(lhs, rhs), BooleanType(), BooleanType())
   }
 
-  private def isClass(ct: ClassType, qualifiedName: String)(implicit symbols: Symbols): Boolean =
-    symbols.lookup.get[ClassDef](qualifiedName).map(_.id == ct.tcd.cd.id).getOrElse(false)
+  class SymbolsCache[T >: Null](retrieve: Symbols => T) {
+    private var symbolsCache: WeakReference[Symbols] = null
+    private var cache: T = null
+
+    def get(symbols: Symbols): T = {
+      if (cache == null) loadCache(symbols)
+      else {
+        symbolsCache match {
+          case WeakReference(sym) =>
+            if (sym == symbols) cache
+            else loadCache(symbols)
+          case _ => loadCache(symbols)
+        }
+      }
+    }
+
+    private def loadCache(symbols: Symbols): T = {
+      symbolsCache = WeakReference(symbols)
+      cache = retrieve(symbols)
+      cache
+    }
+  }
+
+  private val refCache = new SymbolsCache(
+    symbols => symbols.lookup.get[ClassDef]("stainless.lang.Ref")
+  )
+
+  private val refMutCache = new SymbolsCache(
+    symbols => symbols.lookup.get[ClassDef]("stainless.lang.RefMut")
+  )
+
+  def isClass(ct: ClassType, cache: SymbolsCache[Option[ClassDef]])(implicit symbols: Symbols): Boolean =
+    cache.get(symbols).map(_.id == ct.tcd.cd.id).getOrElse(false)
+
+  def isDeref(field: Identifier, cache: SymbolsCache[Option[ClassDef]])(implicit symbols: Symbols): Boolean =
+    cache.get(symbols).map(_.fields(0).id == field).getOrElse(false)
 
   /** Extractor for reference expressions */
   object Ref {
     def unapply(expr: Expr)(implicit symbols: Symbols): Option[Expr] = expr match {
       case ClassConstructor(ct, List(e)) =>
-        if (isClass(ct, "stainless.lang.Ref")) Some(e)
+        if (isClass(ct, refCache)) Some(e)
         else None
       case _ => None
     }
@@ -149,20 +184,17 @@ trait Trees extends oo.Trees with Definitions { self =>
   object RefMut {
     def unapply(expr: Expr)(implicit symbols: Symbols): Option[Expr] = expr match {
       case ClassConstructor(ct, List(e)) =>
-        if (isClass(ct, "stainless.lang.RefMut")) Some(e)
+        if (isClass(ct, refMutCache)) Some(e)
         else None
       case _ => None
     }
   }
 
-  def isDeref(field: Identifier, qualifiedName: String)(implicit symbols: Symbols): Boolean =
-    symbols.lookup.get[ClassDef](qualifiedName).map(_.fields(0).id == field).getOrElse(false)
-
   /** Extractor for dereference expressions */
   object Deref {
     def unapply(expr: Expr)(implicit symbols: Symbols): Option[Expr] = expr match {
       case ClassSelector(e, field) =>
-        if (isDeref(field, "stainless.lang.RefMut") || isDeref(field, "stainless.lang.Ref")) Some(e)
+        if (isDeref(field, refCache) || isDeref(field, refMutCache)) Some(e)
         else None
       case _ => None
     }
@@ -172,7 +204,7 @@ trait Trees extends oo.Trees with Definitions { self =>
   object RefType {
     def unapply(tpe: Type)(implicit symbols: Symbols): Option[Type] = tpe match {
       case ct: ClassType =>
-        if (isClass(ct, "stainless.lang.Ref")) Some(ct.tps(0))
+        if (isClass(ct, refCache)) Some(ct.tps(0))
         else None
       case _ => None
     }
@@ -182,7 +214,7 @@ trait Trees extends oo.Trees with Definitions { self =>
   object RefMutType {
     def unapply(tpe: Type)(implicit symbols: Symbols): Option[Type] = tpe match {
       case ct: ClassType =>
-        if (isClass(ct, "stainless.lang.RefMut")) Some(ct.tps(0))
+        if (isClass(ct, refMutCache)) Some(ct.tps(0))
         else None
       case _ => None
     }
