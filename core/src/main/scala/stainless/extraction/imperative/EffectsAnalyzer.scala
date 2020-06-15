@@ -148,7 +148,7 @@ trait EffectsAnalyzer extends oo.CachingPhase {
       case ADTSelector(e, id) => rec(e, ADTFieldAccessor(id) +: path)
       case ClassSelector(e, id) => rec(e, ClassFieldAccessor(id) +: path)
       case ArraySelect(a, idx) => rec(a, ArrayAccessor(idx) +: path)
-      case MutableMapApply(a, idx) => rec(a, MutableMapAccessor(idx) +: path)
+      case MutableMapApply(m, key) => rec(m, MutableMapAccessor(key) +: path)
       case MutableMapDuplicate(m) => rec(m, path)
 
       // Those are the ways a path can decrease
@@ -208,6 +208,40 @@ trait EffectsAnalyzer extends oo.CachingPhase {
     }
 
     rec(expr, Seq.empty)(env)
+  }
+
+  /**
+   * Transforms an assignment of the form expr.deref = value into an equivalent statement.
+   */
+  def transformDerefAssignment(expr: Expr, value: Expr): Expr = {
+    // Returns whether an expression can be assigned to (or in C terms, is an lvalue)
+    def isAssignable(expr: Expr): Boolean = expr match {
+      // Variables are the roots of assignable expressions
+      case v: Variable => true
+
+      // The following cases preserve assignability
+      case ADTSelector(e, id) => isAssignable(e)
+      case ClassSelector(e, id) => isAssignable(e)
+      case ArraySelect(a, idx) => isAssignable(a)
+      case MutableMapApply(m, key) => isAssignable(m)
+
+      // The rest makes the expression unassignable (for now)
+      case _ => false
+    }
+
+    expr match {
+      // Variables assignments can be tranformed to simple assignments
+      case v: Variable => Assignment(v, value)
+
+      // Those cases can be transformed into assignments if they are assignable
+      case ADTSelector(e, id) if isAssignable(e) => FieldAssignment(e, id, value)
+      case ClassSelector(e, id) if isAssignable(e) => FieldAssignment(e, id, value)
+      case ArraySelect(a, idx) if isAssignable(a) => ArrayUpdate(a, idx, value)
+      case MutableMapApply(m, key) if isAssignable(m) => MutableMapUpdate(m, key, value)
+
+      // Other cases cannot be assigned
+      case _ => throw FatalError(s"$expr is not assignable")
+    }
   }
 
   protected def typeToAccessor(tpe: Type, id: Identifier)(implicit s: Symbols): Accessor = tpe match {

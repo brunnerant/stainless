@@ -209,6 +209,10 @@ trait AntiAliasing
             val nfds = fds.map(fd => updateFunction(Inner(fd), newEnv).toLocal)
             LetRec(nfds, transform(body, newEnv)).copiedFrom(l)
 
+          case DerefAssignment(expr, value) =>
+            val assignment = transformDerefAssignment(expr, value)
+            transform(assignment, env)
+
           case up @ ArrayUpdate(a, i, v) =>
             val idx = ValDef.fresh("idx", refRemover.transform(i.getType))
             val rhs = ValDef.fresh("rhs", refRemover.transform(v.getType))
@@ -237,6 +241,7 @@ trait AntiAliasing
             val rhs = ValDef.fresh("rhs", refRemover.transform(v.getType))
             
             val effects = getTargets(o, env).map(t => Effect(t :+ typeToAccessor(o.getType, id), rhs.toVariable))
+            println(effects)
             val assignments = Block(effects.toSeq.map(applyEffect), UnitLiteral())
 
             Block(

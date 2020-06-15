@@ -200,6 +200,16 @@ trait Trees extends oo.Trees with Definitions { self =>
     }
   }
 
+  /** Extractor for dereference assignments */
+  object DerefAssignment {
+    def unapply(expr: Expr)(implicit symbols: Symbols): Option[(Expr, Expr)] = expr match {
+      case FieldAssignment(obj, field, value) =>
+        if (isDeref(field, refCache) || isDeref(field, refMutCache)) Some((obj, value))
+        else None
+      case _ => None
+    }
+  }
+
   /** Extractor for reference types */
   object RefType {
     def unapply(tpe: Type)(implicit symbols: Symbols): Option[Type] = tpe match {
